@@ -1,0 +1,6 @@
+{
+  "name": "Feiticeiros & Maldições 2.5 — Ficha OBR",
+  "description": "Extensão de ficha digital completa do sistema Feiticeiros & Maldições RPG 2.5 para Owlbear Rodeo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

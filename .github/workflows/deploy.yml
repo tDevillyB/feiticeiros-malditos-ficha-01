@@ -27,16 +27,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Configurar Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Instalar dependências
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: bun install --frozen-lockfile
 
       - name: Compilar projeto
-        run: npm run build
+        run: bun run build
 
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5

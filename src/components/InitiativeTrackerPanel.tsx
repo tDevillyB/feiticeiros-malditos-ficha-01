@@ -91,7 +91,9 @@ export function InitiativeTrackerPanel({
     participants.find((p) => p.id === activeParticipantId) ?? null;
 
   const handleAddFromSheet = (withRoll: boolean) => {
-    const targetId = selectedSheetId || availableSheets[0]?.id;
+    const targetId = availableSheets.some((s) => s.id === selectedSheetId)
+      ? selectedSheetId
+      : availableSheets[0]?.id;
     const sheet = availableSheets.find((s) => s.id === targetId);
     if (!sheet) return;
     const initMod = resolveCalculableValue(sheet.derived.initiative.total);

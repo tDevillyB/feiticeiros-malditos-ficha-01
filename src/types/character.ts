@@ -995,4 +995,5 @@ export interface SharedTableState {
   version: number;
   updatedAt: string;
   summaries: Record<string, SharedCharacterSummary>;
+  deletedSheets?: Record<string, string>;
 }

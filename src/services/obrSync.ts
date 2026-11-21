@@ -65,7 +65,31 @@ export type OBRSyncMessage =
       type: 'REMOVE_SHEET_SYNC';
       sheetId: string;
       senderId: string;
+      deletedAt?: string;
     };
+
+const MAX_ROOM_TOMBSTONES = 60;
+
+function parseDeletedSheetsMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  const result: Record<string, string> = {};
+  for (const [sheetId, ts] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof sheetId === 'string' && typeof ts === 'string' && ts) {
+      result[sheetId] = ts;
+    }
+  }
+  return result;
+}
+
+function pruneTombstones(
+  map: Record<string, string>,
+  maxEntries = MAX_ROOM_TOMBSTONES
+): Record<string, string> {
+  const entries = Object.entries(map);
+  if (entries.length <= maxEntries) return map;
+  entries.sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : 0));
+  return Object.fromEntries(entries.slice(0, maxEntries));
+}
 
 function parseTableState(raw: unknown): SharedTableState {
   if (
@@ -80,12 +104,14 @@ function parseTableState(raw: unknown): SharedTableState {
       version: typed.version ?? 1,
       updatedAt: typed.updatedAt ?? new Date().toISOString(),
       summaries: typed.summaries,
+      deletedSheets: parseDeletedSheetsMap(typed.deletedSheets),
     };
   }
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
     summaries: {},
+    deletedSheets: {},
   };
 }
 
@@ -260,6 +286,27 @@ export async function savePrivacySettingsToPlayerMetadata(
   });
 }
 
+/**
+ * Remove o registro de privacidade de uma ficha excluída dos metadados do jogador no OBR.
+ */
+export async function removePrivacySettingsFromPlayerMetadata(
+  sheetId: string,
+  playerId: string | null
+): Promise<void> {
+  if (!OBR.isAvailable || !OBR.isReady || !playerId) return;
+
+  const existingMeta = await OBR.player.getMetadata();
+  const currentMap = parsePlayerPrivacyMap(existingMeta[OBR_PLAYER_PRIVACY_KEY]);
+  if (!(sheetId in currentMap)) return;
+
+  const nextMap: PlayerPrivacyMap = { ...currentMap };
+  delete nextMap[sheetId];
+
+  await OBR.player.setMetadata({
+    [OBR_PLAYER_PRIVACY_KEY]: nextMap,
+  });
+}
+
 let roomMetadataWriteQueue: Promise<unknown> = Promise.resolve();
 
 export function enqueueRoomMetadataWrite<T>(task: () => Promise<T>): Promise<T> {
@@ -286,6 +333,12 @@ export function upsertSharedSummaryInRoom(
 
     const currentState = parseTableState(currentMeta[OBR_TABLE_METADATA_KEY]);
     const existingSummary = currentState.summaries[sheet.id];
+    const deletedAt = currentState.deletedSheets?.[sheet.id];
+
+    // Impede que uma sincronização atrasada ressuscite uma ficha recém-excluída
+    if (deletedAt && (!sheet.updatedAt || deletedAt >= sheet.updatedAt)) {
+      return currentState;
+    }
 
     // Impede que um jogador comum sobrescreva o resumo de ficha pertencente a outro jogador
     if (
@@ -311,10 +364,16 @@ export function upsertSharedSummaryInRoom(
       [summary.sheetId]: summary,
     };
 
+    const nextDeletedSheets = { ...(currentState.deletedSheets ?? {}) };
+    if (deletedAt && sheet.updatedAt && sheet.updatedAt > deletedAt) {
+      delete nextDeletedSheets[sheet.id];
+    }
+
     const nextState: SharedTableState = {
       version: 1,
       updatedAt: new Date().toISOString(),
       summaries: mergedSummaries,
+      deletedSheets: pruneTombstones(nextDeletedSheets),
     };
 
     const serializedSize = new TextEncoder().encode(JSON.stringify(nextState)).length;
@@ -335,10 +394,12 @@ export function upsertSharedSummaryInRoom(
 }
 
 /**
- * Remove o resumo de um personagem dos metadados compartilhados da sala OBR.
+ * Remove o resumo de um personagem dos metadados compartilhados da sala OBR
+ * e opcionalmente registra tombstone para impedir restauração por caches de outros participantes.
  */
 export function removeSharedSummaryFromRoom(
-  sheetId: string
+  sheetId: string,
+  options?: { deletedAt?: string; recordTombstone?: boolean }
 ): Promise<SharedTableState | null> {
   if (!OBR.isAvailable || !OBR.isReady) return Promise.resolve(null);
 
@@ -350,19 +411,30 @@ export function removeSharedSummaryFromRoom(
     ]);
     const currentState = parseTableState(currentMeta[OBR_TABLE_METADATA_KEY]);
     const existing = currentState.summaries[sheetId];
-    if (!existing) return currentState;
+    const shouldTombstone = Boolean(options?.recordTombstone);
 
-    if (myRole !== 'GM' && existing.ownerPlayerId && existing.ownerPlayerId !== myId) {
+    if (!existing && !shouldTombstone) return currentState;
+
+    if (existing && myRole !== 'GM' && existing.ownerPlayerId && existing.ownerPlayerId !== myId) {
       return currentState;
     }
 
     const nextSummaries = { ...currentState.summaries };
     delete nextSummaries[sheetId];
 
+    const deletedAt = options?.deletedAt ?? new Date().toISOString();
+    const nextDeletedSheets = shouldTombstone
+      ? pruneTombstones({
+          ...(currentState.deletedSheets ?? {}),
+          [sheetId]: deletedAt,
+        })
+      : pruneTombstones(currentState.deletedSheets ?? {});
+
     const nextState: SharedTableState = {
       version: 1,
       updatedAt: new Date().toISOString(),
       summaries: nextSummaries,
+      deletedSheets: nextDeletedSheets,
     };
 
     await OBR.room.setMetadata({

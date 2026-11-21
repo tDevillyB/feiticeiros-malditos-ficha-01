@@ -25,10 +25,11 @@ import { PersonalSheetTab } from './components/tabs/PersonalSheetTab';
 import { SummonsTab } from './components/tabs/SummonsTab';
 import { TrainingsTab } from './components/tabs/TrainingsTab';
 import { WalletTab } from './components/tabs/WalletTab';
-import { createVanillaBlankSheet } from './data/vanillaTemplate';
+import { createVanillaBlankSheet, generateUniqueSheetId } from './data/vanillaTemplate';
 import {
   initOBRSession,
   normalizeSyncedSheet,
+  removePrivacySettingsFromPlayerMetadata,
   removeSharedSummaryFromRoom,
   savePrivacySettingsToPlayerMetadata,
   sendOBRSyncMessage,
@@ -58,6 +59,8 @@ type SheetTabId =
 
 const STORAGE_KEY = 'fm25_obr_vanilla_sheets_v1';
 const GM_REMOTE_CACHE_KEY = 'fm25_obr_gm_remote_sheets_v1';
+const DELETED_SHEETS_STORAGE_KEY = 'fm25_obr_deleted_sheets_v1';
+const MAX_LOCAL_TOMBSTONES = 120;
 
 const TAB_ITEMS: Array<{
   id: SheetTabId;
@@ -73,28 +76,64 @@ const TAB_ITEMS: Array<{
   { id: 'escudo', label: 'Escudo do Mestre', icon: Shield },
 ];
 
-function loadInitialSheets(): FichaPersonagem[] {
+function pruneDeletedSheetsMap(
+  map: Record<string, string>,
+  maxEntries = MAX_LOCAL_TOMBSTONES
+): Record<string, string> {
+  const entries = Object.entries(map).filter(
+    ([id, ts]) => typeof id === 'string' && id.length > 0 && typeof ts === 'string' && ts.length > 0
+  );
+  if (entries.length <= maxEntries) return Object.fromEntries(entries);
+  entries.sort((a, b) => (a[1] > b[1] ? -1 : a[1] < b[1] ? 1 : 0));
+  return Object.fromEntries(entries.slice(0, maxEntries));
+}
+
+function loadDeletedSheetsMap(): Record<string, string> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(DELETED_SHEETS_STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as FichaPersonagem[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((s) => normalizeSyncedSheet(s));
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === 'object') {
+        return pruneDeletedSheetsMap(parsed as Record<string, string>);
       }
     }
   } catch {
-    // Fallback para ficha em branco vanilla
+    // Ignora erro ao ler tombstones locais
   }
-  return [createVanillaBlankSheet()];
+  return {};
 }
 
-function loadGmCachedSheets(): FichaPersonagem[] {
+function deduplicateSheetsById(sheets: FichaPersonagem[]): FichaPersonagem[] {
+  const byId = new Map<string, FichaPersonagem>();
+  for (const rawSheet of sheets) {
+    if (!rawSheet || typeof rawSheet.id !== 'string' || !rawSheet.id) continue;
+    const sheet = normalizeSyncedSheet(rawSheet);
+    const existing = byId.get(sheet.id);
+    if (!existing || sheet.updatedAt >= existing.updatedAt) {
+      byId.set(sheet.id, sheet);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+function filterOutDeletedSheets(
+  sheets: FichaPersonagem[],
+  deletedMap: Record<string, string>
+): FichaPersonagem[] {
+  return sheets.filter((s) => {
+    const deletedAt = deletedMap[s.id];
+    if (!deletedAt) return true;
+    return Boolean(s.updatedAt && s.updatedAt > deletedAt);
+  });
+}
+
+function loadGmCachedSheets(deletedMap: Record<string, string>): FichaPersonagem[] {
   try {
     const raw = localStorage.getItem(GM_REMOTE_CACHE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as FichaPersonagem[];
       if (Array.isArray(parsed)) {
-        return parsed.map((s) => normalizeSyncedSheet(s));
+        return filterOutDeletedSheets(deduplicateSheetsById(parsed), deletedMap);
       }
     }
   } catch {
@@ -103,10 +142,40 @@ function loadGmCachedSheets(): FichaPersonagem[] {
   return [];
 }
 
+function loadInitialSheets(
+  deletedMap: Record<string, string>,
+  hasGmCachedSheets: boolean
+): FichaPersonagem[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw) as FichaPersonagem[];
+      if (Array.isArray(parsed)) {
+        const cleaned = filterOutDeletedSheets(deduplicateSheetsById(parsed), deletedMap);
+        if (cleaned.length > 0) {
+          return cleaned;
+        }
+        if (hasGmCachedSheets) {
+          return [];
+        }
+      }
+    }
+  } catch {
+    // Fallback para ficha em branco vanilla
+  }
+  return [createVanillaBlankSheet()];
+}
+
 export default function App() {
-  const [localSheets, setLocalSheets] = useState<FichaPersonagem[]>(() => loadInitialSheets());
+  const initialDeletedMap = useMemo(() => loadDeletedSheetsMap(), []);
+  const [deletedSheets, setDeletedSheets] = useState<Record<string, string>>(
+    () => initialDeletedMap
+  );
   const [gmCachedSheets, setGmCachedSheets] = useState<FichaPersonagem[]>(() =>
-    loadGmCachedSheets()
+    loadGmCachedSheets(initialDeletedMap)
+  );
+  const [localSheets, setLocalSheets] = useState<FichaPersonagem[]>(() =>
+    loadInitialSheets(initialDeletedMap, gmCachedSheets.length > 0)
   );
   const [remoteSharedSheets, setRemoteSharedSheets] = useState<FichaPersonagem[]>([]);
   const [sharedSummaries, setSharedSummaries] = useState<Record<string, SharedCharacterSummary>>(
@@ -123,10 +192,10 @@ export default function App() {
   });
 
   const [activeSheetId, setActiveSheetId] = useState<string>(
-    () => localSheets[0]?.id ?? ''
+    () => localSheets[0]?.id ?? gmCachedSheets[0]?.id ?? ''
   );
   const [selectedControlSheetId, setSelectedControlSheetId] = useState<string>(
-    () => localSheets[0]?.id ?? ''
+    () => localSheets[0]?.id ?? gmCachedSheets[0]?.id ?? ''
   );
   const [activeTab, setActiveTab] = useState<SheetTabId>('pessoal');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -150,6 +219,8 @@ export default function App() {
   remoteSharedSheetsRef.current = remoteSharedSheets;
   const sharedSummariesRef = useRef(sharedSummaries);
   sharedSummariesRef.current = sharedSummaries;
+  const deletedSheetsRef = useRef(deletedSheets);
+  deletedSheetsRef.current = deletedSheets;
   const obrCtxRef = useRef(obrCtx);
   obrCtxRef.current = obrCtx;
   const viewerRoleRef = useRef(viewerRole);
@@ -288,6 +359,36 @@ export default function App() {
   }, [accessibleFullSheets, activeSheet.id, activeSheetId]);
 
   useEffect(() => {
+    setConfirmDeleteId(null);
+  }, [activeSheetId]);
+
+  useEffect(() => {
+    if (viewerRole === 'PLAYER' && localSheets.length === 0) {
+      const fresh = createVanillaBlankSheet();
+      const stamped: FichaPersonagem = {
+        ...fresh,
+        permissions: {
+          ...fresh.permissions,
+          ownerPlayerId: obrCtx.isInsideOBR ? obrCtx.playerId : null,
+          ownerPlayerName: obrCtx.isInsideOBR ? obrCtx.playerName : '',
+          createdByRole: 'PLAYER',
+          showOnMasterShield: true,
+        },
+      };
+      const nextLocal = [stamped];
+      localSheetsRef.current = nextLocal;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLocal));
+      } catch {
+        // Ignora erro de quota
+      }
+      setLocalSheets(nextLocal);
+      setActiveSheetId(stamped.id);
+      setSelectedControlSheetId(stamped.id);
+    }
+  }, [viewerRole, localSheets.length, obrCtx.isInsideOBR, obrCtx.playerId, obrCtx.playerName]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(localSheets));
     } catch {
@@ -302,6 +403,14 @@ export default function App() {
       // Ignora erro de quota caso navegador restrinja storage
     }
   }, [gmCachedSheets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DELETED_SHEETS_STORAGE_KEY, JSON.stringify(deletedSheets));
+    } catch {
+      // Ignora erro de quota caso navegador restrinja storage
+    }
+  }, [deletedSheets]);
 
   // Remove imediatamente da memória do jogador qualquer ficha remota cuja permissão tenha sido revogada nos metadados da sala
   useEffect(() => {
@@ -373,11 +482,17 @@ export default function App() {
       const ctx = obrCtxRef.current;
       if (!ctx.isInsideOBR || !ctx.isReady || !ctx.playerId) return;
 
-      const ownedSheets = sheetsToPublish.filter(
-        (sheet) =>
+      const ownedSheets = sheetsToPublish.filter((sheet) => {
+        const isOwned =
           sheet.permissions.ownerPlayerId === null ||
-          sheet.permissions.ownerPlayerId === ctx.playerId
-      );
+          sheet.permissions.ownerPlayerId === ctx.playerId;
+        if (!isOwned) return false;
+        const deletedAt = deletedSheetsRef.current[sheet.id];
+        if (deletedAt && (!sheet.updatedAt || deletedAt >= sheet.updatedAt)) {
+          return false;
+        }
+        return true;
+      });
       if (ownedSheets.length === 0) return;
 
       try {
@@ -440,7 +555,65 @@ export default function App() {
         setObrCtx(nextCtx);
       },
       onTableStateChange: (tableState) => {
-        setSharedSummaries(tableState.summaries);
+        const incomingDeleted = tableState.deletedSheets ?? {};
+        const mergedDeleted = { ...deletedSheetsRef.current };
+        let deletedChanged = false;
+        for (const [sheetId, ts] of Object.entries(incomingDeleted)) {
+          if (!mergedDeleted[sheetId] || ts > mergedDeleted[sheetId]) {
+            mergedDeleted[sheetId] = ts;
+            deletedChanged = true;
+          }
+        }
+        const prunedDeleted = pruneDeletedSheetsMap(mergedDeleted);
+        if (deletedChanged) {
+          deletedSheetsRef.current = prunedDeleted;
+          try {
+            localStorage.setItem(
+              DELETED_SHEETS_STORAGE_KEY,
+              JSON.stringify(prunedDeleted)
+            );
+          } catch {
+            // Ignora erro de quota
+          }
+          setDeletedSheets(prunedDeleted);
+        }
+
+        const filteredGmCache = filterOutDeletedSheets(
+          gmCachedSheetsRef.current,
+          prunedDeleted
+        );
+        if (filteredGmCache.length !== gmCachedSheetsRef.current.length) {
+          gmCachedSheetsRef.current = filteredGmCache;
+          try {
+            localStorage.setItem(
+              GM_REMOTE_CACHE_KEY,
+              JSON.stringify(filteredGmCache)
+            );
+          } catch {
+            // Ignora erro de quota
+          }
+          setGmCachedSheets(filteredGmCache);
+        }
+
+        const filteredRemote = filterOutDeletedSheets(
+          remoteSharedSheetsRef.current,
+          prunedDeleted
+        );
+        if (filteredRemote.length !== remoteSharedSheetsRef.current.length) {
+          remoteSharedSheetsRef.current = filteredRemote;
+          setRemoteSharedSheets(filteredRemote);
+        }
+
+        const cleanedSummaries: Record<string, SharedCharacterSummary> = {};
+        for (const [sheetId, summary] of Object.entries(tableState.summaries)) {
+          const deletedAt = prunedDeleted[sheetId];
+          if (deletedAt && (!summary.updatedAt || deletedAt >= summary.updatedAt)) {
+            continue;
+          }
+          cleanedSummaries[sheetId] = summary;
+        }
+        sharedSummariesRef.current = cleanedSummaries;
+        setSharedSummaries(cleanedSummaries);
       },
       onSyncMessage: (msg: OBRSyncMessage, _connectionId, verifiedSender) => {
         const ctx = obrCtxRef.current;
@@ -460,6 +633,10 @@ export default function App() {
           // Se este cliente for Mestre e tiver atualizações mais recentes de fichas remotas, reenvia
           if (currentRole === 'GM' && ctx.playerId) {
             for (const cached of gmCachedSheetsRef.current) {
+              const deletedAt = deletedSheetsRef.current[cached.id];
+              if (deletedAt && (!cached.updatedAt || deletedAt >= cached.updatedAt)) {
+                continue;
+              }
               if (
                 cached.permissions.ownerPlayerId === msg.requesterId ||
                 cached.permissions.allowOtherPlayersViewSheet ||
@@ -479,6 +656,10 @@ export default function App() {
 
         if (msg.type === 'FULL_SHEET_SYNC') {
           const normalized = normalizeSyncedSheet(msg.sheet);
+          const deletedAt = deletedSheetsRef.current[normalized.id];
+          if (deletedAt && (!normalized.updatedAt || deletedAt >= normalized.updatedAt)) {
+            return;
+          }
 
           if (ctx.isInsideOBR) {
             if (ctx.party.length > 0 && !verifiedSender) return;
@@ -566,6 +747,10 @@ export default function App() {
           }
 
           const normalized = normalizeSyncedSheet(msg.sheet);
+          const deletedAt = deletedSheetsRef.current[normalized.id];
+          if (deletedAt && (!normalized.updatedAt || deletedAt >= normalized.updatedAt)) {
+            return;
+          }
           const hasLocal = localSheetsRef.current.find((s) => s.id === normalized.id);
 
           if (hasLocal) {
@@ -662,8 +847,45 @@ export default function App() {
             }
           }
 
-          setGmCachedSheets((prev) => prev.filter((s) => s.id !== msg.sheetId));
-          setRemoteSharedSheets((prev) => prev.filter((s) => s.id !== msg.sheetId));
+          const deletedAt = msg.deletedAt || new Date().toISOString();
+          const nextDeleted = pruneDeletedSheetsMap({
+            ...deletedSheetsRef.current,
+            [msg.sheetId]: deletedAt,
+          });
+          deletedSheetsRef.current = nextDeleted;
+          setDeletedSheets(nextDeleted);
+
+          const nextGmCached = gmCachedSheetsRef.current.filter(
+            (s) => s.id !== msg.sheetId
+          );
+          gmCachedSheetsRef.current = nextGmCached;
+          const nextRemote = remoteSharedSheetsRef.current.filter(
+            (s) => s.id !== msg.sheetId
+          );
+          remoteSharedSheetsRef.current = nextRemote;
+
+          try {
+            localStorage.setItem(
+              DELETED_SHEETS_STORAGE_KEY,
+              JSON.stringify(nextDeleted)
+            );
+            localStorage.setItem(
+              GM_REMOTE_CACHE_KEY,
+              JSON.stringify(nextGmCached)
+            );
+          } catch {
+            // Ignora erro de quota
+          }
+
+          setGmCachedSheets(nextGmCached);
+          setRemoteSharedSheets(nextRemote);
+          setSharedSummaries((prev) => {
+            if (!(msg.sheetId in prev)) return prev;
+            const copy = { ...prev };
+            delete copy[msg.sheetId];
+            sharedSummariesRef.current = copy;
+            return copy;
+          });
         }
       },
     });
@@ -1111,7 +1333,7 @@ export default function App() {
     const isPlayerCreator = viewerRole === 'PLAYER';
     const copy: FichaPersonagem = recalculateCharacterSheet({
       ...structuredClone(activeSheet),
-      id: `sheet-${Date.now()}`,
+      id: generateUniqueSheetId(),
       createdAt: now,
       updatedAt: now,
       permissions: {
@@ -1153,15 +1375,63 @@ export default function App() {
   };
 
   const handleDeleteSheet = (id: string) => {
-    if (!localSheets.some((s) => s.id === id)) {
+    const currentLocal = localSheetsRef.current;
+    const currentGmCached = gmCachedSheetsRef.current;
+    const currentRemoteShared = remoteSharedSheetsRef.current;
+
+    const wasLocal = currentLocal.some((s) => s.id === id);
+    const wasGmCached = viewerRole === 'GM' && currentGmCached.some((s) => s.id === id);
+
+    if (!wasLocal && !wasGmCached) {
       setConfirmDeleteId(null);
       return;
     }
 
-    if (localSheets.length <= 1) {
+    const deletedAt = new Date().toISOString();
+    const nextDeletedMap = pruneDeletedSheetsMap({
+      ...deletedSheetsRef.current,
+      [id]: deletedAt,
+    });
+    deletedSheetsRef.current = nextDeletedMap;
+    setDeletedSheets(nextDeletedMap);
+
+    let nextLocalSheets = currentLocal.filter((s) => s.id !== id);
+    const nextGmCachedSheets = currentGmCached.filter((s) => s.id !== id);
+    const nextRemoteSharedSheets = currentRemoteShared.filter((s) => s.id !== id);
+
+    const nextSummaries = { ...sharedSummariesRef.current };
+    delete nextSummaries[id];
+    sharedSummariesRef.current = nextSummaries;
+
+    const remainingPool =
+      viewerRole === 'GM'
+        ? deduplicateSheetsById([...nextGmCachedSheets, ...nextLocalSheets])
+        : [...nextLocalSheets, ...nextRemoteSharedSheets];
+
+    const nextLocalIds = new Set(nextLocalSheets.map((s) => s.id));
+    const nextAccessCtx: SheetAccessContext = {
+      viewerRole,
+      currentPlayerId: obrCtx.playerId,
+      isInsideOBR: obrCtx.isInsideOBR,
+      localSheetIds: nextLocalIds,
+    };
+
+    const remainingAccessible = remainingPool.filter(
+      (s) =>
+        evaluateSheetAccessFromSheet(s, nextAccessCtx, nextSummaries[s.id])
+          .canViewFullSheet
+    );
+
+    const needsBlankReplacement =
+      remainingAccessible.length === 0 ||
+      (viewerRole === 'PLAYER' && nextLocalSheets.length === 0);
+
+    let replacementSheet: FichaPersonagem | null = null;
+    const isPlayerCreator = viewerRole === 'PLAYER';
+
+    if (needsBlankReplacement) {
       const fresh = createVanillaBlankSheet();
-      const isPlayerCreator = viewerRole === 'PLAYER';
-      const stamped: FichaPersonagem = {
+      replacementSheet = {
         ...fresh,
         permissions: {
           ...fresh.permissions,
@@ -1171,50 +1441,90 @@ export default function App() {
           showOnMasterShield: isPlayerCreator,
         },
       };
-
-      setLocalSheets([stamped]);
-      setActiveSheetId(stamped.id);
-      setConfirmDeleteId(null);
-
-      if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
-        void removeSharedSummaryFromRoom(id);
-        void sendOBRSyncMessage({
-          type: 'REMOVE_SHEET_SYNC',
-          sheetId: id,
-          senderId: obrCtx.playerId,
-        });
-        if (isPlayerCreator) {
-          void upsertSharedSummaryInRoom(stamped);
-          void sendOBRSyncMessage({
-            type: 'FULL_SHEET_SYNC',
-            sheet: stamped,
-            senderId: obrCtx.playerId,
-            sentAt: stamped.updatedAt,
-          });
-        }
-      }
-
-      showToast('Ficha reiniciada em branco.');
-      return;
+      nextLocalSheets = [...nextLocalSheets, replacementSheet];
     }
 
-    const remaining = localSheets.filter((s) => s.id !== id);
-    setLocalSheets(remaining);
-    if (activeSheetId === id && remaining[0]) {
-      setActiveSheetId(remaining[0].id);
+    localSheetsRef.current = nextLocalSheets;
+    gmCachedSheetsRef.current = nextGmCachedSheets;
+    remoteSharedSheetsRef.current = nextRemoteSharedSheets;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLocalSheets));
+      localStorage.setItem(GM_REMOTE_CACHE_KEY, JSON.stringify(nextGmCachedSheets));
+      localStorage.setItem(
+        DELETED_SHEETS_STORAGE_KEY,
+        JSON.stringify(nextDeletedMap)
+      );
+    } catch {
+      // Ignora erro de quota caso navegador restrinja storage
     }
+
+    setLocalSheets(nextLocalSheets);
+    setGmCachedSheets(nextGmCachedSheets);
+    setRemoteSharedSheets(nextRemoteSharedSheets);
+    setSharedSummaries(nextSummaries);
     setConfirmDeleteId(null);
 
+    const nextFallbackSheetId =
+      remainingAccessible[0]?.id ??
+      replacementSheet?.id ??
+      nextLocalSheets[0]?.id ??
+      '';
+
+    if (
+      activeSheetId === id ||
+      (!remainingAccessible.some((s) => s.id === activeSheetId) && nextFallbackSheetId)
+    ) {
+      setActiveSheetId(
+        remainingAccessible.find((s) => s.id !== id)?.id ?? nextFallbackSheetId
+      );
+    }
+
+    const nextControlPool =
+      viewerRole === 'GM'
+        ? [...nextLocalSheets, ...nextGmCachedSheets]
+        : [...nextLocalSheets, ...nextRemoteSharedSheets];
+    if (
+      selectedControlSheetId === id ||
+      !nextControlPool.some((s) => s.id === selectedControlSheetId)
+    ) {
+      setSelectedControlSheetId(nextControlPool[0]?.id ?? nextFallbackSheetId);
+    }
+
     if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
-      void removeSharedSummaryFromRoom(id);
+      if (wasLocal) {
+        void removePrivacySettingsFromPlayerMetadata(id, obrCtx.playerId);
+      }
+      void removeSharedSummaryFromRoom(id, {
+        deletedAt,
+        recordTombstone: true,
+      });
       void sendOBRSyncMessage({
         type: 'REMOVE_SHEET_SYNC',
         sheetId: id,
         senderId: obrCtx.playerId,
+        deletedAt,
       });
+
+      if (replacementSheet && isPlayerCreator) {
+        void savePrivacySettingsToPlayerMetadata([replacementSheet], obrCtx.playerId);
+        void upsertSharedSummaryInRoom(replacementSheet);
+        if (obrCtx.party.some((p) => p.role === 'GM')) {
+          void sendOBRSyncMessage({
+            type: 'FULL_SHEET_SYNC',
+            sheet: replacementSheet,
+            senderId: obrCtx.playerId,
+            sentAt: replacementSheet.updatedAt,
+          });
+        }
+      }
     }
 
-    showToast('Ficha excluída.');
+    showToast(
+      needsBlankReplacement
+        ? 'Ficha excluída e substituída por uma ficha em branco.'
+        : 'Ficha excluída.'
+    );
   };
 
   const handleExportJson = () => {
@@ -1252,7 +1562,7 @@ export default function App() {
         const isPlayerCreator = viewerRole === 'PLAYER';
         const imported = normalizeSyncedSheet({
           ...parsed,
-          id: `sheet-${Date.now()}`,
+          id: generateUniqueSheetId(),
           updatedAt: now,
           permissions: {
             ...parsed.permissions,
@@ -1313,6 +1623,9 @@ export default function App() {
 
   const isReadOnly = !activePolicy.canEditFullSheet;
   const activeGrade = resolveCalculableValue(activeSheet.identity.grade);
+  const canDeleteActiveSheet =
+    isLocalActiveSheet ||
+    (viewerRole === 'GM' && gmCachedSheets.some((s) => s.id === activeSheet.id));
 
   return (
     <div className="min-h-screen overflow-x-clip bg-[#0b0d13] text-slate-100">
@@ -1579,7 +1892,7 @@ export default function App() {
               />
             </label>
 
-            {isLocalActiveSheet && (
+            {canDeleteActiveSheet && (
               <>
                 {confirmDeleteId === activeSheet.id ? (
                   <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1 sm:gap-1">
@@ -1605,7 +1918,7 @@ export default function App() {
                     className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300 whitespace-nowrap shrink-0 sm:min-h-0 sm:justify-start"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    {localSheets.length <= 1 ? 'Zerar' : 'Excluir'}
+                    {accessibleFullSheets.length <= 1 ? 'Zerar' : 'Excluir'}
                   </button>
                 )}
               </>
@@ -1632,6 +1945,7 @@ export default function App() {
 
         {activeTab === 'pessoal' && (
           <PersonalSheetTab
+            key={activeSheet.id}
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}
@@ -1647,6 +1961,7 @@ export default function App() {
         )}
         {activeTab === 'amaldicoado' && (
           <CursedProfileTab
+            key={activeSheet.id}
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}
@@ -1654,6 +1969,7 @@ export default function App() {
         )}
         {activeTab === 'invocacoes' && (
           <SummonsTab
+            key={activeSheet.id}
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}
@@ -1661,6 +1977,7 @@ export default function App() {
         )}
         {activeTab === 'inventario' && (
           <InventoryTab
+            key={activeSheet.id}
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}
@@ -1668,6 +1985,7 @@ export default function App() {
         )}
         {activeTab === 'treinamentos' && (
           <TrainingsTab
+            key={activeSheet.id}
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}
@@ -1675,6 +1993,7 @@ export default function App() {
         )}
         {activeTab === 'carteira' && (
           <WalletTab
+            key={activeSheet.id}
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}

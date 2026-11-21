@@ -115,13 +115,18 @@ function makeDefaultAttribute(key: AttributeKey, label: string) {
   };
 }
 
+export function generateUniqueSheetId(): string {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `sheet-${Date.now()}-${rand}`;
+}
+
 /**
  * Cria uma ficha modelo v2.5 completamente zerada (vanilla),
  * pronta para o jogador preencher do zero sem nenhum dado de personagem pré-definido.
  */
 export function createVanillaBlankSheet(initialTitle = ''): FichaPersonagem {
   const now = new Date().toISOString();
-  const id = `sheet-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const id = generateUniqueSheetId();
 
   const conditionsFlags = SIMPLE_CONDITIONS.reduce(
     (acc, key) => {

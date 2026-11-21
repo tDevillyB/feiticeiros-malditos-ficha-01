@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "manifest_version": 1,
   "description": "Ficha digital interativa do sistema Feiticeiros & Maldições RPG 2.5 para Owlbear Rodeo.",
+  "icon": "/feiticeiros-malditos-ficha-01/icon-detailed.png",
   "action": {
     "title": "Ficha F&M 2.5",
     "icon": "/feiticeiros-malditos-ficha-01/icon.svg",

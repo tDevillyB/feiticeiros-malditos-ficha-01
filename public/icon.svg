@@ -1,7 +1,134 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="14" fill="#11141e"/>
-  <rect x="4" y="4" width="56" height="56" rx="11" stroke="#6366f1" stroke-width="2.5"/>
-  <circle cx="32" cy="32" r="15" stroke="#a5b4fc" stroke-width="2.5"/>
-  <path d="M32 11v42M11 32h42" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="32" cy="32" r="5" fill="#6366f1"/>
+  <defs>
+    <linearGradient id="cursedFlameOuter" x1="10" y1="58" x2="54" y2="6" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4c1d95" />
+      <stop offset="45%" stop-color="#7e22ce" />
+      <stop offset="85%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#6b21a8" />
+    </linearGradient>
+    <linearGradient id="cursedFlameInner" x1="16" y1="54" x2="48" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9333ea" />
+      <stop offset="50%" stop-color="#d8b4fe" />
+      <stop offset="100%" stop-color="#f3e8ff" />
+    </linearGradient>
+    <linearGradient id="hammerBody" x1="18" y1="18" x2="44" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22123d" />
+      <stop offset="55%" stop-color="#120922" />
+      <stop offset="100%" stop-color="#090412" />
+    </linearGradient>
+    <linearGradient id="hammerEdge" x1="16" y1="18" x2="45" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#e9d5ff" />
+      <stop offset="100%" stop-color="#c084fc" />
+    </linearGradient>
+  </defs>
+
+  <!-- Simplified bold cursed energy flame silhouette (transparent background, zero micro-specks) -->
+  <path
+    d="M31.5 59.5
+       C25.5 59 22.5 55.5 21 50.5
+       C17.5 47.5 16.5 43 19 39
+       C13.5 38 9 34 8.5 28
+       C8 22.5 12 17.5 16.5 15
+       C15.5 18 17 19.5 19 17.5
+       C22 14.5 26 14 29 14.5
+       C30 9.5 34.5 5 41 4.5
+       C45 4.2 47.5 7 46 10
+       C50 8.5 55 10.5 55.5 14.5
+       C56 18.5 51.5 21 48 22.5
+       C53 23.5 56 27.5 54.5 32.5
+       C53 37 47.5 38.5 44 38.5
+       C47.5 40.5 48.5 45.5 44.5 50
+       C41 54 36.5 59.8 31.5 59.5 Z"
+    fill="url(#cursedFlameOuter)"
+    stroke="#140729"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+  />
+
+  <!-- Inner luminous cursed energy core around the hammer -->
+  <path
+    d="M31 57
+       C26.5 56.5 24 53 23.5 48
+       C21.5 44.5 21.5 40.5 23.5 37
+       C17.5 36 12.5 32.5 12.5 27
+       C12.5 22.5 16 19 19.5 18
+       C22.5 17 27 16 31.5 15.5
+       C33.5 11.5 37.5 8.5 41.5 9
+       C44 9.5 43.5 12.5 41.5 14.5
+       C45.5 13.5 50 14 50.5 17
+       C51 19.5 47 22 44.5 24
+       C49 25 51 28.5 49 32.5
+       C47 36 42.5 36.5 39.5 37
+       C43 39.5 43.5 44 40 48
+       C37 51.5 35 57.3 31 57 Z"
+    fill="url(#cursedFlameInner)"
+    opacity="0.95"
+  />
+
+  <!-- Bold dark flame tongues for cursed energy depth -->
+  <path
+    d="M33.5 15 C35 10.5 39.5 7.5 42.5 8.5 C40.5 10.5 39 13 39.5 16 Z"
+    fill="#190a30"
+  />
+  <path
+    d="M14 29 C11.5 26 12.5 22 15.5 20.5 C15 23 15.5 25.5 17 28 Z"
+    fill="#190a30"
+  />
+  <path
+    d="M46.5 34.5 C49.5 32.5 51.5 29 50 26.5 C48.5 28.5 46.5 30.5 44 32 Z"
+    fill="#190a30"
+  />
+
+  <!-- Hammer Head (thickened rim for crisp 16-24px legibility) -->
+  <path
+    d="M18.5 18 Q30.5 19.6 42.5 18 L45.5 21 V29 L41.8 32.5 H19.2 L15.5 29 V21 Z"
+    fill="url(#hammerBody)"
+    stroke="url(#hammerEdge)"
+    stroke-width="2.2"
+    stroke-linejoin="round"
+  />
+
+  <!-- Hammer Head Specular Bevels -->
+  <path
+    d="M17.5 20.4 L20.4 22.5 M43.5 20.4 L40 23 M38.2 19.8 L33 27 M41.8 29 L38 31.2"
+    stroke="#f5f3ff"
+    stroke-width="1.4"
+    stroke-linecap="round"
+    opacity="0.92"
+  />
+
+  <!-- Hammer Neck Collar -->
+  <path
+    d="M26 32.5 H35 V37.2 L33.4 38.8 H27.6 L26 37.2 Z"
+    fill="url(#hammerBody)"
+    stroke="url(#hammerEdge)"
+    stroke-width="1.9"
+    stroke-linejoin="round"
+  />
+
+  <!-- Hammer Shaft -->
+  <path
+    d="M27.6 38.8 H33.4 V51.2 H27.6 Z"
+    fill="url(#hammerBody)"
+    stroke="url(#hammerEdge)"
+    stroke-width="1.9"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M31.4 40 V50"
+    stroke="#d8b4fe"
+    stroke-width="1.2"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+
+  <!-- Hammer Pommel Base -->
+  <path
+    d="M27.6 51.2 H33.4 L35.6 53.3 V56.8 H25.4 V53.3 Z"
+    fill="url(#hammerBody)"
+    stroke="url(#hammerEdge)"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
 </svg>

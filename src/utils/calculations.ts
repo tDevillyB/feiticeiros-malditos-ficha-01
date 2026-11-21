@@ -1458,6 +1458,12 @@ export function buildSharedCharacterSummary(
     allowOtherPlayersViewCombatCenter: Boolean(
       sheet.permissions.allowOtherPlayersViewCombatCenter
     ),
+    ...(sheet.permissions.createdByRole
+      ? { createdByRole: sheet.permissions.createdByRole }
+      : {}),
+    ...(typeof sheet.permissions.showOnMasterShield === 'boolean'
+      ? { showOnMasterShield: sheet.permissions.showOnMasterShield }
+      : {}),
     updatedAt: sheet.updatedAt,
   };
 }

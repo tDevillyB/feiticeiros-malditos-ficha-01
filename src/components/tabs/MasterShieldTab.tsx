@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  SlidersHorizontal,
   Sparkles,
   Swords,
   Unlock,
@@ -45,11 +46,33 @@ import {
 import {
   evaluateSheetAccess,
   evaluateSheetAccessFromSheet,
+  isMasterCreatedSheet,
+  shouldShowOnMasterShield,
+  type MasterShieldVisibilityContext,
   type SheetAccessContext,
 } from '../../utils/permissions';
 import { getGradeTheme } from '../../utils/gradeTheme';
+import {
+  createDefaultInitiativeState,
+  removeTokenFromOBRInitiative,
+  saveInitiativeStateToRoom,
+  setActiveTokenInOBRTracker,
+  sortInitiativeParticipants,
+  subscribeOBRInitiative,
+  updateTokenInitiativeValueInOBR,
+  type DetectedOBRInitiativeToken,
+} from '../../services/obrInitiative';
+import type {
+  InitiativeParticipant,
+  InitiativeRoomState,
+} from '../../types/initiative';
 import { CalculableValueControl } from '../CalculableValueControl';
 import { GradeBadge } from '../GradeBadge';
+import {
+  doesParticipantMatchCard,
+  InitiativeTrackerPanel,
+} from '../InitiativeTrackerPanel';
+import { MasterShieldVisibilityModal } from '../MasterShieldVisibilityModal';
 import { NumericInput } from '../NumericInput';
 
 export interface MasterShieldTabProps {
@@ -106,6 +129,7 @@ interface RosterCharacterSlotProps {
   card: SharedCharacterSummary;
   isGM: boolean;
   isOwner: boolean;
+  isActiveTurn?: boolean;
   canQuickEdit: boolean;
   canOpenCombatCenter: boolean;
   canOpenFullSheet: boolean;
@@ -120,6 +144,7 @@ function RosterCharacterSlot({
   card,
   isGM,
   isOwner,
+  isActiveTurn = false,
   canQuickEdit,
   canOpenCombatCenter,
   canOpenFullSheet,
@@ -152,16 +177,31 @@ function RosterCharacterSlot({
 
   const frameStyle = {
     transform: 'skewX(-8deg)',
-    '--grade-border': gradeTheme.borderColor,
+    '--grade-border': isActiveTurn ? gradeTheme.hoverBorderColor : gradeTheme.borderColor,
     '--grade-border-hover': gradeTheme.hoverBorderColor,
+    ...(isActiveTurn
+      ? {
+          boxShadow: `0 0 22px -2px ${gradeTheme.ambientGlow}, 0 0 0 1px ${gradeTheme.hoverBorderColor}, 0 14px 30px rgba(0,0,0,0.65)`,
+        }
+      : {}),
   } as CSSProperties;
 
   return (
     <article className="group relative flex w-[224px] snap-center shrink-0 flex-col sm:w-[252px]">
       {/* Moldura Diagonal do Retrato */}
       <div className="relative mx-auto h-[284px] w-[192px] sm:h-[322px] sm:w-[216px]">
+        {isActiveTurn && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-1.5 rounded-lg opacity-45 blur-md transition-opacity duration-300"
+            style={{
+              background: `radial-gradient(circle at 50% 45%, ${gradeTheme.ambientGlow}, transparent 72%)`,
+              transform: 'skewX(-8deg)',
+            }}
+          />
+        )}
         <div
-          className="grade-frame relative h-full w-full overflow-hidden border bg-[#090b12] shadow-[0_14px_30px_rgba(0,0,0,0.55)] transition-colors duration-200"
+          className="grade-frame relative h-full w-full overflow-hidden border bg-[#090b12] shadow-[0_14px_30px_rgba(0,0,0,0.55)] transition-[border-color,box-shadow] duration-200"
           style={frameStyle}
         >
           {/* Conteúdo interno contra-inclinado para manter retrato e textos 100% retos */}
@@ -225,6 +265,24 @@ function RosterCharacterSlot({
               background: `linear-gradient(90deg, ${gradeTheme.lineColor}, transparent 85%)`,
             }}
           />
+
+          {/* Indicador sutil de turno ativo na iniciativa */}
+          {isActiveTurn && (
+            <div
+              className="pointer-events-none absolute top-2.5 left-3 z-20 inline-flex items-center gap-1 rounded-xs border bg-[#090b12]/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-100 backdrop-blur-xs"
+              style={{
+                transform: 'skewX(8deg)',
+                borderColor: gradeTheme.hoverBorderColor,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rotate-45"
+                style={{ backgroundColor: gradeTheme.accentText }}
+              />
+              Turno
+            </div>
+          )}
 
           {/* Indicador discreto de trava do Mestre */}
           {card.lockedByGM && (
@@ -438,6 +496,14 @@ export function MasterShieldTab({
   const [conditionSearch, setConditionSearch] = useState('');
   const [combatResistanceDraft, setCombatResistanceDraft] = useState('');
   const [combatImmunityDraft, setCombatImmunityDraft] = useState('');
+  const [isVisibilityModalOpen, setIsVisibilityModalOpen] = useState(false);
+  const [obrInitTokens, setObrInitTokens] = useState<DetectedOBRInitiativeToken[]>([]);
+  const [initiativeState, setInitiativeState] = useState<InitiativeRoomState>(() =>
+    createDefaultInitiativeState()
+  );
+  const prevObrActiveTokenRef = useRef<string | null>(null);
+  const initiativeStateRef = useRef(initiativeState);
+  initiativeStateRef.current = initiativeState;
   const overviewTrackRef = useRef<HTMLDivElement>(null);
 
   const isGM = viewerRole === 'GM';
@@ -454,10 +520,47 @@ export function MasterShieldTab({
     }
   }, [requestedSubView]);
 
+  useEffect(() => {
+    const unsub = subscribeOBRInitiative({
+      onTokensChange: (tokens) => {
+        setObrInitTokens(tokens);
+        const activeToken = tokens.find((t) => t.activeInOBR)?.tokenId ?? null;
+        if (activeToken && activeToken !== prevObrActiveTokenRef.current) {
+          prevObrActiveTokenRef.current = activeToken;
+          const nextParticipantId = `token:${activeToken}`;
+          if (initiativeStateRef.current.activeParticipantId !== nextParticipantId) {
+            const nextState: InitiativeRoomState = {
+              ...initiativeStateRef.current,
+              activeParticipantId: nextParticipantId,
+              updatedAt: new Date().toISOString(),
+            };
+            setInitiativeState(nextState);
+          }
+        } else if (!activeToken) {
+          prevObrActiveTokenRef.current = null;
+        }
+      },
+      onRoomStateChange: (roomState) => {
+        setInitiativeState(roomState);
+      },
+    });
+    return unsub;
+  }, []);
+
   const localSheetIds = useMemo(
     () => new Set(localSheets.map((s) => s.id)),
     [localSheets]
   );
+
+  const gmPlayerIds = useMemo(() => {
+    const ids = new Set<string>(
+      party.filter((p) => p.role === 'GM').map((p) => p.id)
+    );
+    if (isInsideOBR && isGM && currentPlayerId) {
+      ids.add(currentPlayerId);
+    }
+    return ids;
+  }, [party, isInsideOBR, isGM, currentPlayerId]);
 
   const accessContext: SheetAccessContext = useMemo(
     () => ({
@@ -469,8 +572,19 @@ export function MasterShieldTab({
     [viewerRole, currentPlayerId, isInsideOBR, localSheetIds]
   );
 
+  const visibilityContext: MasterShieldVisibilityContext = useMemo(
+    () => ({
+      viewerRole,
+      currentPlayerId,
+      isInsideOBR,
+      localSheetIds,
+      gmPlayerIds,
+    }),
+    [viewerRole, currentPlayerId, isInsideOBR, localSheetIds, gmPlayerIds]
+  );
+
   // Lista consolidada para a Visão Geral da Mesa:
-  // combina os resumos da sala OBR (sharedSummaries) com as fichas conhecidas na sessão
+  // Fichas de jogadores aparecem automaticamente; NPCs/inimigos do Mestre só quando ativados
   const overviewCards = useMemo(() => {
     const map = new Map<string, SharedCharacterSummary>();
 
@@ -485,8 +599,256 @@ export function MasterShieldTab({
       }
     }
 
-    return Array.from(map.values());
-  }, [sessionSheets, sharedSummaries]);
+    return Array.from(map.values()).filter((card) =>
+      shouldShowOnMasterShield(
+        {
+          sheetId: card.sheetId,
+          ownerPlayerId: card.ownerPlayerId,
+          createdByRole: card.createdByRole,
+          showOnMasterShield: card.showOnMasterShield,
+        },
+        visibilityContext
+      )
+    );
+  }, [sessionSheets, sharedSummaries, visibilityContext]);
+
+  const gmManagedStats = useMemo(() => {
+    let totalMaster = 0;
+    let visibleMaster = 0;
+    for (const sheet of sessionSheets) {
+      if (
+        isMasterCreatedSheet(
+          {
+            sheetId: sheet.id,
+            ownerPlayerId: sheet.permissions.ownerPlayerId,
+            createdByRole: sheet.permissions.createdByRole,
+          },
+          visibilityContext
+        )
+      ) {
+        totalMaster += 1;
+        if (sheet.permissions.showOnMasterShield) {
+          visibleMaster += 1;
+        }
+      }
+    }
+    return { totalMaster, visibleMaster };
+  }, [sessionSheets, visibilityContext]);
+
+  const initiativeParticipants = useMemo(() => {
+    const merged: InitiativeParticipant[] = [
+      ...obrInitTokens.map((t) => ({
+        id: `token:${t.tokenId}`,
+        name: t.name,
+        initiative:
+          initiativeState.tokenOverrides[t.tokenId] !== undefined
+            ? initiativeState.tokenOverrides[t.tokenId]
+            : t.initiative,
+        source: 'obr-token' as const,
+        tokenId: t.tokenId,
+        avatarUrl: t.avatarUrl,
+        activeInOBR: t.activeInOBR,
+      })),
+      ...initiativeState.manualEntries.map((m) => ({
+        id: m.id,
+        name: m.name,
+        initiative: m.initiative,
+        source: m.source,
+        sheetId: m.sheetId,
+      })),
+    ];
+    return sortInitiativeParticipants(merged);
+  }, [obrInitTokens, initiativeState]);
+
+  const activeInitiativeParticipant = useMemo(
+    () =>
+      initiativeParticipants.find(
+        (p) => p.id === initiativeState.activeParticipantId
+      ) ?? null,
+    [initiativeParticipants, initiativeState.activeParticipantId]
+  );
+
+  const persistInitiativeState = (next: InitiativeRoomState) => {
+    setInitiativeState(next);
+    void saveInitiativeStateToRoom(next);
+  };
+
+  const handleNextTurn = () => {
+    if (!isGM || initiativeParticipants.length === 0) return;
+    const currentIndex = initiativeParticipants.findIndex(
+      (p) => p.id === initiativeState.activeParticipantId
+    );
+    const nextIndex =
+      currentIndex === -1
+        ? 0
+        : (currentIndex + 1) % initiativeParticipants.length;
+    const wrappedToNewRound =
+      currentIndex !== -1 && nextIndex === 0;
+    const nextParticipant = initiativeParticipants[nextIndex];
+    const nextRound = wrappedToNewRound
+      ? initiativeState.round + 1
+      : Math.max(1, initiativeState.round);
+
+    persistInitiativeState({
+      ...initiativeState,
+      round: nextRound,
+      activeParticipantId: nextParticipant.id,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (isInsideOBR && obrInitTokens.some((t) => t.hasOfficialTrackerMeta)) {
+      const nextTokenId = nextParticipant.tokenId ?? null;
+      prevObrActiveTokenRef.current = nextTokenId;
+      void setActiveTokenInOBRTracker(nextTokenId);
+    }
+  };
+
+  const handleResetInitiative = () => {
+    if (!isGM) return;
+    persistInitiativeState({
+      ...createDefaultInitiativeState(),
+      round: 1,
+      activeParticipantId: null,
+      manualEntries: [],
+      tokenOverrides: {},
+      updatedAt: new Date().toISOString(),
+    });
+    if (isInsideOBR && obrInitTokens.some((t) => t.hasOfficialTrackerMeta)) {
+      prevObrActiveTokenRef.current = null;
+      void setActiveTokenInOBRTracker(null);
+    }
+  };
+
+  const handleSelectActiveParticipant = (participantId: string) => {
+    if (!isGM) return;
+    const target = initiativeParticipants.find((p) => p.id === participantId);
+    persistInitiativeState({
+      ...initiativeState,
+      activeParticipantId: participantId,
+      updatedAt: new Date().toISOString(),
+    });
+    if (isInsideOBR && obrInitTokens.some((t) => t.hasOfficialTrackerMeta)) {
+      const tokenId = target?.tokenId ?? null;
+      prevObrActiveTokenRef.current = tokenId;
+      void setActiveTokenInOBRTracker(tokenId);
+    }
+  };
+
+  const handleUpdateParticipantInitiative = (
+    participant: InitiativeParticipant,
+    nextValue: number
+  ) => {
+    if (!isGM) return;
+    if (participant.source === 'obr-token' && participant.tokenId) {
+      persistInitiativeState({
+        ...initiativeState,
+        tokenOverrides: {
+          ...initiativeState.tokenOverrides,
+          [participant.tokenId]: nextValue,
+        },
+        updatedAt: new Date().toISOString(),
+      });
+      if (isInsideOBR) {
+        void updateTokenInitiativeValueInOBR(participant.tokenId, nextValue);
+      }
+      return;
+    }
+
+    persistInitiativeState({
+      ...initiativeState,
+      manualEntries: initiativeState.manualEntries.map((m) =>
+        m.id === participant.id ? { ...m, initiative: nextValue } : m
+      ),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleRemoveParticipant = (participant: InitiativeParticipant) => {
+    if (!isGM) return;
+    const isRemovingActive =
+      initiativeState.activeParticipantId === participant.id;
+
+    if (participant.source === 'obr-token' && participant.tokenId) {
+      const nextOverrides = { ...initiativeState.tokenOverrides };
+      delete nextOverrides[participant.tokenId];
+      persistInitiativeState({
+        ...initiativeState,
+        activeParticipantId: isRemovingActive
+          ? null
+          : initiativeState.activeParticipantId,
+        tokenOverrides: nextOverrides,
+        updatedAt: new Date().toISOString(),
+      });
+      if (isInsideOBR) {
+        void removeTokenFromOBRInitiative(participant.tokenId);
+      }
+      return;
+    }
+
+    persistInitiativeState({
+      ...initiativeState,
+      activeParticipantId: isRemovingActive
+        ? null
+        : initiativeState.activeParticipantId,
+      manualEntries: initiativeState.manualEntries.filter(
+        (m) => m.id !== participant.id
+      ),
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleAddSheetParticipant = (
+    sheet: FichaPersonagem,
+    rolledValue?: number
+  ) => {
+    if (!isGM) return;
+    const entryId = `sheet:${sheet.id}`;
+    const value =
+      typeof rolledValue === 'number'
+        ? rolledValue
+        : resolveCalculableValue(sheet.derived.initiative.total);
+    const name = sheet.identity.name.trim() || 'Personagem sem nome';
+
+    const exists = initiativeState.manualEntries.some((m) => m.id === entryId);
+    const nextManual = exists
+      ? initiativeState.manualEntries.map((m) =>
+          m.id === entryId ? { ...m, name, initiative: value } : m
+        )
+      : [
+          ...initiativeState.manualEntries,
+          {
+            id: entryId,
+            name,
+            initiative: value,
+            sheetId: sheet.id,
+            source: 'sheet' as const,
+          },
+        ];
+
+    persistInitiativeState({
+      ...initiativeState,
+      manualEntries: nextManual,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleAddManualParticipant = (name: string, initiative: number) => {
+    if (!isGM) return;
+    const entryId = `manual:${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    persistInitiativeState({
+      ...initiativeState,
+      manualEntries: [
+        ...initiativeState.manualEntries,
+        {
+          id: entryId,
+          name,
+          initiative,
+          source: 'manual',
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    });
+  };
 
   // Identifica a ficha própria do jogador atual (para abertura automática na Central de Combate)
   const primaryOwnedSheet = useMemo(() => {
@@ -2935,16 +3297,10 @@ export function MasterShieldTab({
             }}
           />
 
-          {overviewCards.length === 0 ? (
-            <div className="relative py-10 text-center">
-              <p className="text-sm text-slate-300">
-                Nenhum personagem compartilhado na mesa ainda.
-              </p>
-            </div>
-          ) : (
-            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Identificador discreto lateral inspirado na composição da referência */}
-              <div className="flex shrink-0 flex-row items-baseline justify-between gap-4 border-b border-[#1d2232] pb-3 lg:w-44 lg:flex-col lg:border-b-0 lg:border-r lg:pr-5 lg:pb-0">
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            {/* Identificador discreto lateral + Botões auxiliares de Iniciativa e Gerenciamento */}
+            <div className="flex shrink-0 flex-col gap-3 border-b border-[#1d2232] pb-3 lg:w-44 lg:border-b-0 lg:border-r lg:pr-4 lg:pb-0">
+              <div className="flex flex-row items-baseline justify-between gap-4 lg:flex-col lg:gap-0">
                 <div>
                   <h3 className="text-sm font-semibold tracking-tight text-slate-100">
                     Grupo em Sessão
@@ -2955,13 +3311,72 @@ export function MasterShieldTab({
                   </p>
                 </div>
                 {isInsideOBR && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 lg:mt-1">
                     {party.length} na sala
                   </p>
                 )}
               </div>
 
-              {/* Faixa integrada de retratos diagonais lado a lado (carrossel horizontal no mobile, intacto no desktop) */}
+              {/* Botão/Painel Recolhível do Tracker de Iniciativa */}
+              <InitiativeTrackerPanel
+                isGM={isGM}
+                isInsideOBR={isInsideOBR}
+                round={initiativeState.round}
+                participants={initiativeParticipants}
+                activeParticipantId={initiativeState.activeParticipantId}
+                availableSheets={sessionSheets}
+                onNextTurn={handleNextTurn}
+                onResetInitiative={handleResetInitiative}
+                onSelectActiveParticipant={handleSelectActiveParticipant}
+                onUpdateParticipantInitiative={handleUpdateParticipantInitiative}
+                onRemoveParticipant={handleRemoveParticipant}
+                onAddSheetParticipant={handleAddSheetParticipant}
+                onAddManualParticipant={handleAddManualParticipant}
+              />
+
+              {/* Controle exclusivo do Mestre sobre NPCs e inimigos visíveis no Escudo */}
+              {isGM && (
+                <button
+                  type="button"
+                  onClick={() => setIsVisibilityModalOpen(true)}
+                  className="flex w-full min-h-[38px] items-center justify-between gap-2 rounded border border-[#242a3b] bg-[#0b0d14]/90 px-2.5 py-1.5 text-left text-xs text-slate-200 transition-colors hover:border-indigo-500/40 hover:bg-[#131826] sm:min-h-0"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                    <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate">Fichas no Escudo</span>
+                  </span>
+                  {gmManagedStats.totalMaster > 0 && (
+                    <span className="shrink-0 font-mono-tabular text-[10px] text-slate-400">
+                      {gmManagedStats.visibleMaster}/{gmManagedStats.totalMaster}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Faixa integrada de retratos diagonais lado a lado (carrossel horizontal no mobile, intacto no desktop) */}
+            {overviewCards.length === 0 ? (
+              <div className="relative flex-1 py-10 text-center">
+                <p className="text-sm text-slate-300">
+                  {isGM && gmManagedStats.totalMaster > 0
+                    ? 'Nenhum personagem exibido na Visão Geral neste momento.'
+                    : 'Nenhum personagem compartilhado na mesa ainda.'}
+                </p>
+                {isGM && gmManagedStats.totalMaster > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Fichas de jogadores aparecem automaticamente. Use{' '}
+                    <button
+                      type="button"
+                      onClick={() => setIsVisibilityModalOpen(true)}
+                      className="text-indigo-300 underline-offset-2 hover:underline"
+                    >
+                      Fichas no Escudo
+                    </button>{' '}
+                    para adicionar NPCs ou inimigos à sessão atual.
+                  </p>
+                )}
+              </div>
+            ) : (
               <div className="w-full flex-1">
                 {overviewCards.length > 1 && (
                   <div className="mb-2 flex items-center justify-between gap-2 sm:hidden">
@@ -2999,6 +3414,11 @@ export function MasterShieldTab({
                     const cardPolicy = evaluateSheetAccess(card, accessContext);
                     const canQuickEdit = canQuickEditSummary(card);
                     const hasFullSheet = sessionSheets.some((s) => s.id === card.sheetId);
+                    const isActiveTurn = doesParticipantMatchCard(
+                      activeInitiativeParticipant,
+                      card,
+                      sessionSheets
+                    );
 
                     return (
                       <RosterCharacterSlot
@@ -3006,6 +3426,7 @@ export function MasterShieldTab({
                         card={card}
                         isGM={isGM}
                         isOwner={cardPolicy.isOwner}
+                        isActiveTurn={isActiveTurn}
                         canQuickEdit={canQuickEdit}
                         canOpenCombatCenter={cardPolicy.canViewCombatCenter}
                         canOpenFullSheet={cardPolicy.canViewFullSheet}
@@ -3023,9 +3444,38 @@ export function MasterShieldTab({
                   })}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </section>
+      )}
+
+      {/* Modal exclusivo do Mestre para controlar quais NPCs/inimigos aparecem no Escudo */}
+      {isGM && (
+        <MasterShieldVisibilityModal
+          isOpen={isVisibilityModalOpen}
+          onClose={() => setIsVisibilityModalOpen(false)}
+          sheets={sessionSheets}
+          visibilityContext={visibilityContext}
+          onSetSheetShieldVisibility={(sheetId, visible) =>
+            onUpdateSheetById(sheetId, (prev) => ({
+              ...prev,
+              permissions: {
+                ...prev.permissions,
+                showOnMasterShield: visible,
+              },
+            }))
+          }
+          onSetLocalSheetCategory={(sheetId, role) =>
+            onUpdateSheetById(sheetId, (prev) => ({
+              ...prev,
+              permissions: {
+                ...prev.permissions,
+                createdByRole: role,
+                showOnMasterShield: role === 'PLAYER',
+              },
+            }))
+          }
+        />
       )}
 
       {/* Central de Combate (Mestre: acesso total | Jogador: própria central + compartilhadas em leitura) */}

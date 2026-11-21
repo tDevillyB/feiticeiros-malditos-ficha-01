@@ -901,6 +901,10 @@ export interface CharacterPermissions {
   allowOtherPlayersViewSheet?: boolean;
   /** Permite que outros jogadores visualizem a Central de Combate (somente leitura) */
   allowOtherPlayersViewCombatCenter?: boolean;
+  /** Origem da ficha ('GM' = NPC/inimigo/ficha criada pelo Mestre; 'PLAYER' = personagem de jogador) */
+  createdByRole?: 'GM' | 'PLAYER';
+  /** Controla se fichas criadas pelo Mestre aparecem na Visão Geral do Escudo do Mestre */
+  showOnMasterShield?: boolean;
 }
 
 export interface CharacterSheet {
@@ -982,6 +986,8 @@ export interface SharedCharacterSummary {
   lockedByGM: boolean;
   allowOtherPlayersViewSheet?: boolean;
   allowOtherPlayersViewCombatCenter?: boolean;
+  createdByRole?: 'GM' | 'PLAYER';
+  showOnMasterShield?: boolean;
   updatedAt: string;
 }
 

@@ -42,6 +42,8 @@ import {
   evaluateSheetAccess,
   evaluateSheetAccessFromSheet,
   sanitizeSheetForCombatCenterOnly,
+  shouldShowOnMasterShield,
+  type MasterShieldVisibilityContext,
   type SheetAccessContext,
 } from './utils/permissions';
 
@@ -165,6 +167,16 @@ export default function App() {
     [localSheets]
   );
 
+  const gmPlayerIds = useMemo(() => {
+    const ids = new Set<string>(
+      obrCtx.party.filter((p) => p.role === 'GM').map((p) => p.id)
+    );
+    if (obrCtx.isInsideOBR && obrCtx.role === 'GM' && obrCtx.playerId) {
+      ids.add(obrCtx.playerId);
+    }
+    return ids;
+  }, [obrCtx.party, obrCtx.isInsideOBR, obrCtx.role, obrCtx.playerId]);
+
   const accessContext: SheetAccessContext = useMemo(
     () => ({
       viewerRole,
@@ -174,6 +186,20 @@ export default function App() {
     }),
     [viewerRole, obrCtx.playerId, obrCtx.isInsideOBR, localSheetIds]
   );
+
+  const visibilityContext: MasterShieldVisibilityContext = useMemo(
+    () => ({
+      viewerRole,
+      currentPlayerId: obrCtx.playerId,
+      isInsideOBR: obrCtx.isInsideOBR,
+      localSheetIds,
+      gmPlayerIds,
+    }),
+    [viewerRole, obrCtx.playerId, obrCtx.isInsideOBR, localSheetIds, gmPlayerIds]
+  );
+
+  const visibilityContextRef = useRef(visibilityContext);
+  visibilityContextRef.current = visibilityContext;
 
   // Lista da sessão conforme papel:
   // - Mestre: fichas locais + cache de fichas remotas dos jogadores
@@ -367,11 +393,24 @@ export default function App() {
       for (const sheet of ownedSheets) {
         const allowSheet = Boolean(sheet.permissions.allowOtherPlayersViewSheet);
         const allowCombat = Boolean(sheet.permissions.allowOtherPlayersViewCombatCenter);
+        const visibleOnShield = shouldShowOnMasterShield(
+          {
+            sheetId: sheet.id,
+            ownerPlayerId: sheet.permissions.ownerPlayerId,
+            createdByRole: sheet.permissions.createdByRole,
+            showOnMasterShield: sheet.permissions.showOnMasterShield,
+          },
+          visibilityContextRef.current
+        );
 
         try {
-          await upsertSharedSummaryInRoom(sheet);
+          if (visibleOnShield) {
+            await upsertSharedSummaryInRoom(sheet);
+          } else if (sharedSummariesRef.current[sheet.id]) {
+            await removeSharedSummaryFromRoom(sheet.id);
+          }
 
-          if (hasOnlineGM || allowSheet) {
+          if ((hasOnlineGM && ctx.role !== 'GM') || allowSheet) {
             await sendOBRSyncMessage({
               type: 'FULL_SHEET_SYNC',
               sheet,
@@ -651,6 +690,21 @@ export default function App() {
         };
       }
 
+      if (next.permissions.createdByRole === undefined && obrCtx.role) {
+        changed = true;
+        next = {
+          ...next,
+          permissions: {
+            ...next.permissions,
+            createdByRole: obrCtx.role,
+            showOnMasterShield:
+              obrCtx.role === 'PLAYER'
+                ? true
+                : Boolean(next.permissions.showOnMasterShield),
+          },
+        };
+      }
+
       const privacyRec = obrCtx.privacyBySheetId[s.id];
       const roomSummary = sharedSummariesRef.current[s.id];
       const summaryMatchesOwner =
@@ -790,7 +844,22 @@ export default function App() {
         setLocalSheets(nextLocalSheets);
 
         if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
-          void upsertSharedSummaryInRoom(updated);
+          const visibleOnShield = shouldShowOnMasterShield(
+            {
+              sheetId: updated.id,
+              ownerPlayerId: updated.permissions.ownerPlayerId,
+              createdByRole: updated.permissions.createdByRole,
+              showOnMasterShield: updated.permissions.showOnMasterShield,
+            },
+            visibilityContextRef.current
+          );
+
+          if (visibleOnShield) {
+            void upsertSharedSummaryInRoom(updated);
+          } else if (sharedSummariesRef.current[updated.id]) {
+            void removeSharedSummaryFromRoom(updated.id);
+          }
+
           if (viewerRole === 'GM') {
             void sendOBRSyncMessage({
               type: 'GM_SHEET_UPDATE',
@@ -992,16 +1061,17 @@ export default function App() {
 
   const handleCreateSheet = () => {
     const fresh = createVanillaBlankSheet();
-    const created: FichaPersonagem = obrCtx.isInsideOBR
-      ? {
-          ...fresh,
-          permissions: {
-            ...fresh.permissions,
-            ownerPlayerId: obrCtx.playerId,
-            ownerPlayerName: obrCtx.playerName,
-          },
-        }
-      : fresh;
+    const isPlayerCreator = viewerRole === 'PLAYER';
+    const created: FichaPersonagem = {
+      ...fresh,
+      permissions: {
+        ...fresh.permissions,
+        ownerPlayerId: obrCtx.isInsideOBR ? obrCtx.playerId : null,
+        ownerPlayerName: obrCtx.isInsideOBR ? obrCtx.playerName : '',
+        createdByRole: viewerRole,
+        showOnMasterShield: isPlayerCreator,
+      },
+    };
 
     setLocalSheets((prev) => [...prev, created]);
     setActiveSheetId(created.id);
@@ -1010,18 +1080,24 @@ export default function App() {
 
     if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
       void savePrivacySettingsToPlayerMetadata([created], obrCtx.playerId);
-      void upsertSharedSummaryInRoom(created);
-      if (obrCtx.party.some((p) => p.role === 'GM')) {
-        void sendOBRSyncMessage({
-          type: 'FULL_SHEET_SYNC',
-          sheet: created,
-          senderId: obrCtx.playerId,
-          sentAt: created.updatedAt,
-        });
+      if (isPlayerCreator) {
+        void upsertSharedSummaryInRoom(created);
+        if (obrCtx.party.some((p) => p.role === 'GM')) {
+          void sendOBRSyncMessage({
+            type: 'FULL_SHEET_SYNC',
+            sheet: created,
+            senderId: obrCtx.playerId,
+            sentAt: created.updatedAt,
+          });
+        }
       }
     }
 
-    showToast('Nova ficha em branco criada.');
+    showToast(
+      viewerRole === 'GM'
+        ? 'Nova ficha do Mestre criada (oculta do Escudo até você adicioná-la).'
+        : 'Nova ficha em branco criada.'
+    );
   };
 
   const handleDuplicateSheet = () => {
@@ -1032,6 +1108,7 @@ export default function App() {
 
     const baseName = activeSheet.identity.name.trim() || 'Ficha sem nome';
     const now = new Date().toISOString();
+    const isPlayerCreator = viewerRole === 'PLAYER';
     const copy: FichaPersonagem = recalculateCharacterSheet({
       ...structuredClone(activeSheet),
       id: `sheet-${Date.now()}`,
@@ -1045,6 +1122,8 @@ export default function App() {
           : activeSheet.permissions.ownerPlayerName,
         allowOtherPlayersViewSheet: false,
         allowOtherPlayersViewCombatCenter: false,
+        createdByRole: viewerRole,
+        showOnMasterShield: isPlayerCreator,
       },
       identity: {
         ...activeSheet.identity,
@@ -1057,14 +1136,16 @@ export default function App() {
 
     if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
       void savePrivacySettingsToPlayerMetadata([copy], obrCtx.playerId);
-      void upsertSharedSummaryInRoom(copy);
-      if (obrCtx.party.some((p) => p.role === 'GM')) {
-        void sendOBRSyncMessage({
-          type: 'FULL_SHEET_SYNC',
-          sheet: copy,
-          senderId: obrCtx.playerId,
-          sentAt: now,
-        });
+      if (isPlayerCreator) {
+        void upsertSharedSummaryInRoom(copy);
+        if (obrCtx.party.some((p) => p.role === 'GM')) {
+          void sendOBRSyncMessage({
+            type: 'FULL_SHEET_SYNC',
+            sheet: copy,
+            senderId: obrCtx.playerId,
+            sentAt: now,
+          });
+        }
       }
     }
 
@@ -1079,16 +1160,17 @@ export default function App() {
 
     if (localSheets.length <= 1) {
       const fresh = createVanillaBlankSheet();
-      const stamped: FichaPersonagem = obrCtx.isInsideOBR
-        ? {
-            ...fresh,
-            permissions: {
-              ...fresh.permissions,
-              ownerPlayerId: obrCtx.playerId,
-              ownerPlayerName: obrCtx.playerName,
-            },
-          }
-        : fresh;
+      const isPlayerCreator = viewerRole === 'PLAYER';
+      const stamped: FichaPersonagem = {
+        ...fresh,
+        permissions: {
+          ...fresh.permissions,
+          ownerPlayerId: obrCtx.isInsideOBR ? obrCtx.playerId : null,
+          ownerPlayerName: obrCtx.isInsideOBR ? obrCtx.playerName : '',
+          createdByRole: viewerRole,
+          showOnMasterShield: isPlayerCreator,
+        },
+      };
 
       setLocalSheets([stamped]);
       setActiveSheetId(stamped.id);
@@ -1101,13 +1183,15 @@ export default function App() {
           sheetId: id,
           senderId: obrCtx.playerId,
         });
-        void upsertSharedSummaryInRoom(stamped);
-        void sendOBRSyncMessage({
-          type: 'FULL_SHEET_SYNC',
-          sheet: stamped,
-          senderId: obrCtx.playerId,
-          sentAt: stamped.updatedAt,
-        });
+        if (isPlayerCreator) {
+          void upsertSharedSummaryInRoom(stamped);
+          void sendOBRSyncMessage({
+            type: 'FULL_SHEET_SYNC',
+            sheet: stamped,
+            senderId: obrCtx.playerId,
+            sentAt: stamped.updatedAt,
+          });
+        }
       }
 
       showToast('Ficha reiniciada em branco.');
@@ -1165,6 +1249,7 @@ export default function App() {
           return;
         }
         const now = new Date().toISOString();
+        const isPlayerCreator = viewerRole === 'PLAYER';
         const imported = normalizeSyncedSheet({
           ...parsed,
           id: `sheet-${Date.now()}`,
@@ -1183,6 +1268,8 @@ export default function App() {
             allowOtherPlayersViewCombatCenter: Boolean(
               parsed.permissions?.allowOtherPlayersViewCombatCenter
             ),
+            createdByRole: viewerRole,
+            showOnMasterShield: isPlayerCreator,
           },
         });
         setLocalSheets((prev) => [...prev, imported]);
@@ -1190,24 +1277,26 @@ export default function App() {
 
         if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
           void savePrivacySettingsToPlayerMetadata([imported], obrCtx.playerId);
-          void upsertSharedSummaryInRoom(imported);
-          if (
-            obrCtx.party.some((p) => p.role === 'GM') ||
-            imported.permissions.allowOtherPlayersViewSheet
-          ) {
-            void sendOBRSyncMessage({
-              type: 'FULL_SHEET_SYNC',
-              sheet: imported,
-              senderId: obrCtx.playerId,
-              sentAt: now,
-            });
-          } else if (imported.permissions.allowOtherPlayersViewCombatCenter) {
-            void sendOBRSyncMessage({
-              type: 'FULL_SHEET_SYNC',
-              sheet: sanitizeSheetForCombatCenterOnly(imported),
-              senderId: obrCtx.playerId,
-              sentAt: now,
-            });
+          if (isPlayerCreator) {
+            void upsertSharedSummaryInRoom(imported);
+            if (
+              obrCtx.party.some((p) => p.role === 'GM') ||
+              imported.permissions.allowOtherPlayersViewSheet
+            ) {
+              void sendOBRSyncMessage({
+                type: 'FULL_SHEET_SYNC',
+                sheet: imported,
+                senderId: obrCtx.playerId,
+                sentAt: now,
+              });
+            } else if (imported.permissions.allowOtherPlayersViewCombatCenter) {
+              void sendOBRSyncMessage({
+                type: 'FULL_SHEET_SYNC',
+                sheet: sanitizeSheetForCombatCenterOnly(imported),
+                senderId: obrCtx.playerId,
+                sentAt: now,
+              });
+            }
           }
         }
 

@@ -262,7 +262,7 @@ export async function savePrivacySettingsToPlayerMetadata(
 
 let roomMetadataWriteQueue: Promise<unknown> = Promise.resolve();
 
-function enqueueRoomMetadataWrite<T>(task: () => Promise<T>): Promise<T> {
+export function enqueueRoomMetadataWrite<T>(task: () => Promise<T>): Promise<T> {
   const next = roomMetadataWriteQueue.then(task, task);
   roomMetadataWriteQueue = next.catch(() => null);
   return next;
@@ -396,6 +396,12 @@ export function normalizeSyncedSheet(raw: FichaPersonagem): FichaPersonagem {
       allowOtherPlayersViewCombatCenter: Boolean(
         raw.permissions?.allowOtherPlayersViewCombatCenter
       ),
+      ...(raw.permissions?.createdByRole
+        ? { createdByRole: raw.permissions.createdByRole }
+        : {}),
+      ...(typeof raw.permissions?.showOnMasterShield === 'boolean'
+        ? { showOnMasterShield: raw.permissions.showOnMasterShield }
+        : {}),
     },
     controlledCurses: raw.controlledCurses ?? [],
     summons: (raw.summons ?? []).map((s) => ({

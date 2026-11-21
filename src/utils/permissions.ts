@@ -167,3 +167,65 @@ export function sanitizeSheetForCombatCenterOnly(
     },
   };
 }
+
+export interface MasterShieldVisibilityContext {
+  viewerRole: 'GM' | 'PLAYER';
+  currentPlayerId: string | null;
+  isInsideOBR: boolean;
+  localSheetIds: ReadonlySet<string>;
+  gmPlayerIds: ReadonlySet<string>;
+}
+
+/**
+ * Identifica se a ficha pertence ao fluxo de criação do Mestre (NPCs, inimigos,
+ * maldições, chefes e fichas preparadas pelo GM) em oposição a fichas de jogadores.
+ */
+export function isMasterCreatedSheet(
+  target: {
+    sheetId: string;
+    ownerPlayerId: string | null;
+    createdByRole?: 'GM' | 'PLAYER';
+  },
+  ctx: MasterShieldVisibilityContext
+): boolean {
+  if (target.createdByRole === 'PLAYER') return false;
+  if (target.createdByRole === 'GM') return true;
+
+  // Compatibilidade com fichas legadas (sem createdByRole):
+  if (ctx.isInsideOBR) {
+    if (target.ownerPlayerId && ctx.gmPlayerIds.has(target.ownerPlayerId)) {
+      return true;
+    }
+    if (
+      ctx.viewerRole === 'GM' &&
+      ctx.localSheetIds.has(target.sheetId) &&
+      (target.ownerPlayerId === null || target.ownerPlayerId === ctx.currentPlayerId)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // Modo local fora do OBR: fichas locais sem createdByRole quando no papel de Mestre
+  return ctx.viewerRole === 'GM' && ctx.localSheetIds.has(target.sheetId);
+}
+
+/**
+ * Fichas de jogadores aparecem automaticamente no Escudo do Mestre.
+ * Fichas criadas pelo Mestre (NPCs/inimigos) só aparecem quando explicitamente ativadas.
+ */
+export function shouldShowOnMasterShield(
+  target: {
+    sheetId: string;
+    ownerPlayerId: string | null;
+    createdByRole?: 'GM' | 'PLAYER';
+    showOnMasterShield?: boolean;
+  },
+  ctx: MasterShieldVisibilityContext
+): boolean {
+  if (!isMasterCreatedSheet(target, ctx)) {
+    return true;
+  }
+  return Boolean(target.showOnMasterShield);
+}
+

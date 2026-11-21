@@ -4,6 +4,8 @@ import type {
   AttributesMap,
   CalculableField,
   CalculableNumber,
+  CharacterRecordData,
+  CustomEquipmentEntry,
   DamageMitigationData,
   DamageTypeKey,
   DefenseData,
@@ -14,6 +16,10 @@ import type {
   MasteryMode,
   ProficiencyRollEntry,
   QuickWeaponEntry,
+  ReleaseTechniqueSlot,
+  SharedCharacterSummary,
+  ShikigamiActionEntry,
+  SimpleConditionKey,
   SummonEntry,
   TrainingsData,
   VitalsData,
@@ -320,7 +326,10 @@ export function calculateMaxHitPoints(
     baseHp = dieFaces + Math.max(0, safeLevel - 1) * averagePerLevel;
   }
 
-  const toughnessBonus = vitals.hp.flags.improvedToughness ? safeLevel : 0;
+  const toughnessBonus =
+    vitals.hp.flags.improvedToughness || vitals.hp.flags.robustez
+      ? safeLevel
+      : 0;
   const total =
     baseHp +
     (ownedDiceCount > 0 || vitals.hp.rolledPerLevel.length > 0
@@ -660,15 +669,25 @@ export function recalculateInventory(
   skills: ProficiencyRollEntry[]
 ): InventoryData {
   const forMod = getEffectiveAttributeModifier(attributes, 'FOR');
-  const spaceLimitComputed = Math.max(0, 10 + forMod * 2 + inventory.spaceBonus);
+  const weightBonus = inventory.weightBonus ?? inventory.spaceBonus ?? 0;
+  const weightLimitComputed = Math.max(0, 10 + forMod * 2 + weightBonus);
+  const baseLimitField = inventory.weightLimit ?? inventory.spaceLimit;
+  const nextWeightLimit = withComputedValue(baseLimitField, weightLimitComputed);
 
   const updatedItems = inventory.items.map((item) => {
-    const totalCostComputed = item.quantity * item.unitCost;
-    const totalSpacesComputed = Number((item.quantity * item.unitSpaces).toFixed(2));
+    const unitWeight = item.unitWeight ?? item.unitSpaces ?? 0;
+    const totalCostComputed = Number((item.quantity * item.unitCost).toFixed(2));
+    const totalWeightComputed = Number((item.quantity * unitWeight).toFixed(2));
+    const baseWeightField =
+      item.totalWeight ?? item.totalSpaces ?? createCalculableField(0);
+    const nextTotalWeight = withComputedValue(baseWeightField, totalWeightComputed);
     return {
       ...item,
+      unitWeight,
+      unitSpaces: unitWeight,
       totalCost: withComputedValue(item.totalCost, totalCostComputed),
-      totalSpaces: withComputedValue(item.totalSpaces, totalSpacesComputed),
+      totalWeight: nextTotalWeight,
+      totalSpaces: nextTotalWeight,
     };
   });
 
@@ -680,47 +699,60 @@ export function recalculateInventory(
     };
   });
 
-  const itemsSpaces = updatedItems.reduce(
-    (sum, item) => sum + resolveCalculableValue(item.totalSpaces),
-    0
-  );
-  const weaponsSpaces = updatedWeapons.reduce((sum, w) => sum + w.spaces, 0);
-  const armorsSpaces = inventory.armors.reduce((sum, a) => sum + a.spaces, 0);
-  const shieldsSpaces = inventory.shields.reduce((sum, s) => sum + s.spaces, 0);
-  const equipmentSpaces = inventory.equipmentAndAccessories.reduce(
-    (sum, e) => sum + e.spaces,
+  const itemsWeight = updatedItems.reduce(
+    (sum, item) =>
+      sum + resolveCalculableValue(item.totalWeight ?? item.totalSpaces),
     0
   );
 
-  const occupiedSpacesComputed = Number(
-    (
-      itemsSpaces +
-      weaponsSpaces +
-      armorsSpaces +
-      shieldsSpaces +
-      equipmentSpaces
-    ).toFixed(2)
+  const hasCustomEquipments = Array.isArray(inventory.equipments);
+  const equipmentsWeight = hasCustomEquipments
+    ? (inventory.equipments ?? []).reduce(
+        (sum, eq) => sum + (Number(eq.weight) || 0),
+        0
+      )
+    : updatedWeapons.reduce((sum, w) => sum + w.spaces, 0) +
+      inventory.armors.reduce((sum, a) => sum + a.spaces, 0) +
+      inventory.shields.reduce((sum, s) => sum + s.spaces, 0) +
+      inventory.equipmentAndAccessories.reduce((sum, e) => sum + e.spaces, 0);
+
+  const currentWeightComputed = Number((itemsWeight + equipmentsWeight).toFixed(2));
+  const baseCurrentWeightField =
+    inventory.currentWeight ?? inventory.occupiedSpaces;
+  const nextCurrentWeight = withComputedValue(
+    baseCurrentWeightField,
+    currentWeightComputed
   );
 
   const itemsCost = updatedItems.reduce(
     (sum, item) => sum + resolveCalculableValue(item.totalCost),
     0
   );
-  const weaponsCost = updatedWeapons.reduce((sum, w) => sum + w.cost, 0);
-  const armorsCost = inventory.armors.reduce((sum, a) => sum + a.cost, 0);
-  const shieldsCost = inventory.shields.reduce((sum, s) => sum + s.cost, 0);
-  const specialCost =
+  const equipmentsCost = hasCustomEquipments
+    ? (inventory.equipments ?? []).reduce(
+        (sum, eq) => sum + (Number(eq.cost) || 0),
+        0
+      )
+    : updatedWeapons.reduce((sum, w) => sum + w.cost, 0) +
+      inventory.armors.reduce((sum, a) => sum + a.cost, 0) +
+      inventory.shields.reduce((sum, s) => sum + s.cost, 0) +
+      inventory.equipmentAndAccessories.reduce((sum, s) => sum + s.cost, 0);
+
+  const specialNonEquipmentCost =
     inventory.specialCharacteristics.reduce((sum, s) => sum + s.cost, 0) +
-    inventory.specialAbilities.reduce((sum, s) => sum + s.cost, 0) +
-    inventory.equipmentAndAccessories.reduce((sum, s) => sum + s.cost, 0);
+    inventory.specialAbilities.reduce((sum, s) => sum + s.cost, 0);
 
   return {
     ...inventory,
-    spaceLimit: withComputedValue(inventory.spaceLimit, spaceLimitComputed),
-    occupiedSpaces: withComputedValue(inventory.occupiedSpaces, occupiedSpacesComputed),
+    weightBonus,
+    spaceBonus: weightBonus,
+    weightLimit: nextWeightLimit,
+    spaceLimit: nextWeightLimit,
+    currentWeight: nextCurrentWeight,
+    occupiedSpaces: nextCurrentWeight,
     totalInventoryValue: withComputedValue(
       inventory.totalInventoryValue,
-      itemsCost + weaponsCost + armorsCost + shieldsCost + specialCost
+      Number((itemsCost + equipmentsCost + specialNonEquipmentCost).toFixed(2))
     ),
     items: updatedItems,
     weapons: updatedWeapons,
@@ -840,15 +872,370 @@ export function recalculateSummon(
 
   const dexMod = resolveCalculableValue(updatedAttributes.DEX.modifier);
 
+  const { pe: _legacyPe, ...summonWithoutPe } = summon;
+  void _legacyPe;
+
   return {
-    ...summon,
+    ...summonWithoutPe,
     attributes: updatedAttributes,
     skills: updatedSkills,
     hp: {
       ...summon.hp,
       current: withComputedValue(summon.hp.current, hpCurrentComputed),
     },
+    damageReduction: summon.damageReduction ?? createCalculableField(0),
     initiative: withComputedValue(summon.initiative, dexMod),
+  };
+}
+
+/**
+ * Migra de forma não destrutiva dados legados (Maldições Controladas, ataques/habilidades
+ * antigas de invocações, Liberação Máxima única, armas/armaduras/escudos antigos e Registro)
+ * para as novas estruturas unificadas sem apagar ou sobrescrever conteúdo existente.
+ */
+export function migrateLegacySheetFields(sheet: FichaPersonagem): FichaPersonagem {
+  // 1. Registro do Personagem
+  const rec: Partial<CharacterRecordData> = sheet.characterRecord ?? {};
+  const characterRecord: CharacterRecordData = {
+    age: rec.age ?? '',
+    height: rec.height ?? '',
+    weight: rec.weight ?? '',
+    gender: rec.gender ?? '',
+    hair: rec.hair ?? '',
+    eyes: rec.eyes ?? '',
+    traits: rec.traits ?? '',
+    personality: rec.personality ?? '',
+    ideals: rec.ideals ?? '',
+    history: rec.history ?? '',
+  };
+
+  // 2. Perfil Amaldiçoado: Aptidões de Barreira + 4 slots fixos de Liberação
+  const existingSlots = sheet.cursedProfile.releaseSlots;
+  const maxRel = sheet.cursedProfile.maximumRelease;
+  const hasLegacyMaxRel = Boolean(
+    maxRel &&
+      (maxRel.unlocked ||
+        maxRel.name.trim() ||
+        maxRel.damageOrEffect.trim() ||
+        maxRel.description.trim() ||
+        resolveCalculableValue(maxRel.peCost) > 0)
+  );
+
+  const releaseSlots: ReleaseTechniqueSlot[] = ([1, 2, 3, 4] as const).map(
+    (slotNumber) => {
+      const found = existingSlots?.find((s) => s.slotNumber === slotNumber);
+      if (found) {
+        return {
+          ...found,
+          slotNumber,
+          peCost: found.peCost ?? createCalculableField(0),
+          actionType: found.actionType ?? '',
+          range: found.range ?? '',
+          duration: found.duration ?? '',
+          damageOrEffect: found.damageOrEffect ?? '',
+          description: found.description ?? '',
+        };
+      }
+      if (!existingSlots && slotNumber === 1 && hasLegacyMaxRel) {
+        return {
+          id: 'release-slot-1',
+          slotNumber: 1,
+          unlocked: Boolean(maxRel.unlocked),
+          name: maxRel.name ?? '',
+          peCost: maxRel.peCost ?? createCalculableField(0),
+          actionType: '',
+          range: '',
+          duration: '',
+          damageOrEffect: maxRel.damageOrEffect ?? '',
+          description: maxRel.description ?? '',
+        };
+      }
+      return {
+        id: `release-slot-${slotNumber}`,
+        slotNumber,
+        unlocked: false,
+        name: '',
+        peCost: createCalculableField(0),
+        actionType: '',
+        range: '',
+        duration: '',
+        damageOrEffect: '',
+        description: '',
+      };
+    }
+  );
+
+  // 3. Shikigamis unificados (migra ataques/habilidades legados -> ações, e controlledCurses -> summons)
+  const migrateSummonActions = (s: SummonEntry): SummonEntry => {
+    const hasActionsField = Array.isArray(s.actions);
+    let actions: ShikigamiActionEntry[] = hasActionsField ? [...(s.actions ?? [])] : [];
+
+    if (!hasActionsField) {
+      for (const atk of s.attacks ?? []) {
+        const hitVal = resolveCalculableValue(atk.hitBonus);
+        actions.push({
+          id: atk.id || `act-atk-${Date.now()}-${Math.random()}`,
+          name: atk.name || 'Ação',
+          complexity: 'simples',
+          actionType: 'Ação Padrão',
+          hitBonus: hitVal ? `${hitVal >= 0 ? `+${hitVal}` : hitVal}` : '',
+          damage: atk.damage ?? '',
+          critical: atk.critical ?? '',
+          damageType: atk.damageType ?? '',
+          range: atk.range ?? '',
+          effects: '',
+          description: atk.notes ?? '',
+        });
+      }
+      for (const ab of s.abilities ?? []) {
+        actions.push({
+          id: ab.id || `act-ab-${Date.now()}-${Math.random()}`,
+          name: ab.name || 'Ação',
+          complexity: 'complexa',
+          actionType: ab.actionType || 'Ação Padrão',
+          hitBonus: '',
+          damage: '',
+          critical: '',
+          damageType: '',
+          range: '',
+          effects: ab.cost ?? '',
+          description: ab.description ?? '',
+        });
+      }
+    }
+
+    const { pe: _ignoredPe, ...rest } = s;
+    void _ignoredPe;
+    return {
+      ...rest,
+      summonType: s.summonType || 'Shikigami',
+      damageReduction: s.damageReduction ?? createCalculableField(0),
+      actions,
+      characteristics: s.characteristics ?? [],
+      conditions: s.conditions ?? [],
+      resistances: s.resistances ?? [],
+      immunities: s.immunities ?? [],
+    };
+  };
+
+  const migratedSummons: SummonEntry[] = (sheet.summons ?? []).map(migrateSummonActions);
+  const existingIds = new Set(migratedSummons.map((s) => s.id));
+
+  for (const curse of sheet.controlledCurses ?? []) {
+    if (existingIds.has(curse.id)) continue;
+    const actions: ShikigamiActionEntry[] = [
+      ...curse.attacks.map((atk) => ({
+        id: atk.id,
+        name: atk.name,
+        complexity: 'simples' as const,
+        actionType: 'Ação Padrão',
+        hitBonus: atk.hit ?? '',
+        damage: atk.damage ?? '',
+        critical: '',
+        damageType: atk.damageType ?? '',
+        range: atk.range ?? '',
+        effects: '',
+        description: '',
+      })),
+      ...curse.abilities.map((ab) => ({
+        id: ab.id,
+        name: ab.name,
+        complexity: 'complexa' as const,
+        actionType: 'Ação Padrão',
+        hitBonus: '',
+        damage: '',
+        critical: '',
+        damageType: '',
+        range: '',
+        effects: ab.cost ?? '',
+        description: ab.description ?? '',
+      })),
+    ];
+
+    const attrValues = curse.attributes ?? {};
+    const makeAttr = (k: AttributeKey) => {
+      const value = attrValues[k] ?? 10;
+      return {
+        value,
+        modifier: createCalculableField(calculateAttributeModifier(value)),
+      };
+    };
+
+    migratedSummons.push({
+      id: curse.id,
+      name: curse.name || 'Shikigami',
+      imageUrl: curse.imageUrl,
+      grade: curse.grade ?? '',
+      summonType: curse.category || 'Shikigami',
+      isActive: curse.isActive,
+      summonCostPE: createCalculableField(0),
+      upkeepCostPE: 0,
+      level: createCalculableField(1),
+      hp: {
+        current: createCalculableField(curse.hp.current),
+        max: createCalculableField(curse.hp.max),
+        temp: 0,
+        lost: Math.max(0, curse.hp.max - curse.hp.current),
+      },
+      defense: createCalculableField(curse.defense ?? 10),
+      movement: createCalculableField(curse.movement ?? 9),
+      initiative: createCalculableField(
+        calculateAttributeModifier(attrValues.DEX ?? 10)
+      ),
+      attributes: {
+        FOR: makeAttr('FOR'),
+        DEX: makeAttr('DEX'),
+        CON: makeAttr('CON'),
+        INT: makeAttr('INT'),
+        SAB: makeAttr('SAB'),
+        PRE: makeAttr('PRE'),
+      },
+      skills: [],
+      actions,
+      characteristics: [],
+      attacks: [],
+      abilities: [],
+      damageReduction: createCalculableField(0),
+      resistances: [],
+      immunities: [],
+      conditions: curse.conditions ?? [],
+      notes: curse.notes ?? '',
+    });
+  }
+
+  // 4. Inventário: peso + migração de equipamentos legados para `equipments`
+  const inv = sheet.inventory;
+  let equipments: CustomEquipmentEntry[] | undefined = inv.equipments;
+  if (!Array.isArray(equipments)) {
+    equipments = [
+      ...(inv.weapons ?? []).map(
+        (w): CustomEquipmentEntry => ({
+          id: w.id,
+          name: w.name,
+          category: 'arma',
+          subType: w.category || 'Arma',
+          grade: '',
+          equipped: w.equipped,
+          weight: w.spaces ?? 0,
+          cost: w.cost ?? 0,
+          damage: w.damage ?? '',
+          critical: w.critical ?? '',
+          range: w.range ?? '',
+          weaponType: w.damageType ?? '',
+          bonus: w.bonus ? `${w.bonus >= 0 ? `+${w.bonus}` : w.bonus}` : '',
+          properties: w.properties ?? '',
+          enchantments: [],
+          description: w.notes ?? '',
+        })
+      ),
+      ...(inv.armors ?? []).map(
+        (a): CustomEquipmentEntry => ({
+          id: a.id,
+          name: a.name,
+          category: 'armadura',
+          subType: 'Armadura',
+          grade: '',
+          equipped: a.equipped,
+          weight: a.spaces ?? 0,
+          cost: a.cost ?? 0,
+          defense: a.defenseBonus ? `+${a.defenseBonus}` : '',
+          defensiveBonus: '',
+          rd: '',
+          resistances: '',
+          bonus: '',
+          properties: a.properties ?? '',
+          enchantments: [],
+          description: '',
+        })
+      ),
+      ...(inv.shields ?? []).map(
+        (s): CustomEquipmentEntry => ({
+          id: s.id,
+          name: s.name,
+          category: 'escudo',
+          subType: 'Escudo',
+          grade: '',
+          equipped: s.equipped,
+          weight: s.spaces ?? 0,
+          cost: s.cost ?? 0,
+          defense: s.defenseBonus ? `+${s.defenseBonus}` : '',
+          defensiveBonus: '',
+          rd: '',
+          resistances: '',
+          bonus: '',
+          properties: s.properties ?? '',
+          enchantments: [],
+          description: '',
+        })
+      ),
+      ...(inv.equipmentAndAccessories ?? []).map(
+        (e): CustomEquipmentEntry => ({
+          id: e.id,
+          name: e.name,
+          category: 'equipamento_especial',
+          subType: e.source || 'Equipamento',
+          grade: '',
+          equipped: Boolean(e.equipped),
+          weight: e.spaces ?? 0,
+          cost: e.cost ?? 0,
+          effects: '',
+          bonus: '',
+          properties: '',
+          enchantments: [],
+          description: e.description ?? '',
+        })
+      ),
+    ];
+  }
+
+  let migratedVitals = sheet.vitals;
+  if (migratedVitals.hp.current.usarManual) {
+    const hpMaxEffective = resolveCalculableValue(migratedVitals.hp.max);
+    const targetHp = Math.max(0, resolveCalculableValue(migratedVitals.hp.current));
+    const baseWithTemp = hpMaxEffective + migratedVitals.hp.temp;
+    migratedVitals = {
+      ...migratedVitals,
+      hp: {
+        ...migratedVitals.hp,
+        lost: targetHp < baseWithTemp ? baseWithTemp - targetHp : 0,
+        healed: targetHp > baseWithTemp ? targetHp - baseWithTemp : 0,
+        current: disableManualOverride(migratedVitals.hp.current, true),
+      },
+    };
+  }
+  if (migratedVitals.pe.current.usarManual) {
+    const peMaxEffective = resolveCalculableValue(migratedVitals.pe.max);
+    const targetPe = Math.max(0, resolveCalculableValue(migratedVitals.pe.current));
+    const baseWithTemp = peMaxEffective + migratedVitals.pe.temp;
+    migratedVitals = {
+      ...migratedVitals,
+      pe: {
+        ...migratedVitals.pe,
+        lost: targetPe < baseWithTemp ? baseWithTemp - targetPe : 0,
+        healed: targetPe > baseWithTemp ? targetPe - baseWithTemp : 0,
+        current: disableManualOverride(migratedVitals.pe.current, true),
+      },
+    };
+  }
+
+  return {
+    ...sheet,
+    vitals: migratedVitals,
+    characterRecord,
+    cursedProfile: {
+      ...sheet.cursedProfile,
+      barrierAptitudes: sheet.cursedProfile.barrierAptitudes ?? [],
+      releaseSlots,
+    },
+    summons: migratedSummons,
+    controlledCurses: [],
+    inventory: {
+      ...inv,
+      weightBonus: inv.weightBonus ?? inv.spaceBonus ?? 0,
+      weightLimit: inv.weightLimit ?? inv.spaceLimit,
+      currentWeight: inv.currentWeight ?? inv.occupiedSpaces,
+      equipments,
+    },
   };
 }
 
@@ -980,5 +1367,314 @@ export function recalculateCharacterSheet(sheet: FichaPersonagem): FichaPersonag
     trainings,
     wallet,
     summons,
+  };
+}
+
+// ============================================================================
+// 9. UTILITÁRIOS DE COMBATE, CONTROLE DE MALDIÇÕES E SINCRONIZAÇÃO OBR
+// ============================================================================
+
+const CURSE_CONTROL_KEYWORDS = [
+  'controlador',
+  'domador de maldições',
+  'domador de maldicoes',
+  'controle de maldições',
+  'controle de maldicoes',
+  'manipulação de maldições',
+  'manipulacao de maldicoes',
+];
+
+/**
+ * Identifica de forma segura se o personagem possui acesso ao Controle de Maldições
+ * a partir da especialização, multiclasse, habilidades, características, técnica
+ * ou habilitação explícita na ficha.
+ */
+export function hasCurseControlAccess(sheet: FichaPersonagem): boolean {
+  if (sheet.cursedProfile.curseControlEnabled) {
+    return true;
+  }
+  if ((sheet.controlledCurses?.length ?? 0) > 0 || (sheet.summons?.length ?? 0) > 0) {
+    return true;
+  }
+
+  const searchableTexts: string[] = [
+    sheet.identity.specialization,
+    sheet.identity.multiclass,
+    sheet.cursedProfile.techniqueName,
+    sheet.cursedProfile.techniqueDescription,
+    ...sheet.characteristics,
+    ...sheet.talents,
+    ...sheet.originTraits,
+    ...sheet.specializationAbilities.map((a) => `${a.name} ${a.description}`),
+    ...sheet.skillTalentsTable.map((s) => s.name),
+    ...sheet.cursedProfile.techniqueAbilities.map((a) => `${a.name} ${a.description}`),
+    ...sheet.cursedProfile.passiveAbilities.map((p) => `${p.name} ${p.effect}`),
+  ];
+
+  const normalized = searchableTexts.join(' ').toLowerCase();
+  return CURSE_CONTROL_KEYWORDS.some((kw) => normalized.includes(kw));
+}
+
+/**
+ * Constrói o resumo compacto da ficha para compartilhamento no Escudo do Mestre
+ * via OBR.room.metadata (mantendo payload reduzido dentro do limite de 16KB).
+ */
+export function buildSharedCharacterSummary(
+  sheet: FichaPersonagem
+): SharedCharacterSummary {
+  const activeConditions = (Object.keys(sheet.conditions.flags) as SimpleConditionKey[]).filter(
+    (key) => sheet.conditions.flags[key]
+  );
+
+  // Evita gravar Data URIs/base64 pesados nos metadados da sala do OBR
+  const safeAvatarUrl =
+    sheet.identity.avatarUrl &&
+    !sheet.identity.avatarUrl.startsWith('data:') &&
+    sheet.identity.avatarUrl.length <= 512
+      ? sheet.identity.avatarUrl
+      : undefined;
+
+  return {
+    sheetId: sheet.id,
+    ownerPlayerId: sheet.permissions.ownerPlayerId,
+    ownerPlayerName: sheet.permissions.ownerPlayerName,
+    name: sheet.identity.name,
+    playerName: sheet.identity.player,
+    ...(safeAvatarUrl ? { avatarUrl: safeAvatarUrl } : {}),
+    grade: resolveCalculableValue(sheet.identity.grade),
+    level: resolveCalculableValue(sheet.identity.level),
+    specialization: sheet.identity.specialization,
+    hpCurrent: resolveCalculableValue(sheet.vitals.hp.current),
+    hpMax: resolveCalculableValue(sheet.vitals.hp.max),
+    hpPercentage: resolveCalculableValue(sheet.vitals.hp.percentage),
+    peCurrent: resolveCalculableValue(sheet.vitals.pe.current),
+    peMax: resolveCalculableValue(sheet.vitals.pe.max),
+    pePercentage: resolveCalculableValue(sheet.vitals.pe.percentage),
+    activeConditions,
+    bleeding: sheet.conditions.bleeding,
+    freezing: sheet.conditions.freezing,
+    lockedByGM: sheet.permissions.lockedByGM,
+    allowOtherPlayersViewSheet: Boolean(sheet.permissions.allowOtherPlayersViewSheet),
+    allowOtherPlayersViewCombatCenter: Boolean(
+      sheet.permissions.allowOtherPlayersViewCombatCenter
+    ),
+    updatedAt: sheet.updatedAt,
+  };
+}
+
+/**
+ * Aplica variação incremental (+/-) em PV ou PE respeitando os campos reais da ficha.
+ */
+export function adjustPoolResource(
+  sheet: FichaPersonagem,
+  resource: 'hp' | 'pe',
+  delta: number
+): FichaPersonagem {
+  const pool = sheet.vitals[resource];
+  const currentEffective = resolveCalculableValue(pool.current);
+  const maxEffective = resolveCalculableValue(pool.max);
+
+  if (pool.current.usarManual) {
+    return setPoolResourceCurrent(sheet, resource, Math.max(0, currentEffective + delta));
+  }
+
+  let nextLost = pool.lost;
+  let nextHealed = pool.healed;
+
+  if (delta < 0) {
+    let remainingSpend = Math.abs(delta);
+    if (nextHealed > 0) {
+      const fromHealed = Math.min(nextHealed, remainingSpend);
+      nextHealed -= fromHealed;
+      remainingSpend -= fromHealed;
+    }
+    const maxAllowedLoss = Math.max(0, maxEffective + pool.temp + nextHealed);
+    nextLost = Math.min(maxAllowedLoss, nextLost + remainingSpend);
+  } else if (delta > 0) {
+    const reduceLost = Math.min(nextLost, delta);
+    nextLost -= reduceLost;
+    const leftoverHeal = delta - reduceLost;
+    if (leftoverHeal > 0 && maxEffective === 0) {
+      nextHealed += leftoverHeal;
+    }
+  }
+
+  return {
+    ...sheet,
+    vitals: {
+      ...sheet.vitals,
+      [resource]: {
+        ...pool,
+        lost: nextLost,
+        healed: nextHealed,
+        current: disableManualOverride(pool.current, true),
+      },
+    },
+  };
+}
+
+/**
+ * Define diretamente o valor atual desejado de PV ou PE na ficha real.
+ * Mantém `lost`/`healed` sincronizados para que alterações futuras no máximo
+ * atualizem o valor atual de forma consistente.
+ */
+export function setPoolResourceCurrent(
+  sheet: FichaPersonagem,
+  resource: 'hp' | 'pe',
+  targetValue: number
+): FichaPersonagem {
+  const safeTarget = Math.max(0, targetValue);
+  const pool = sheet.vitals[resource];
+  const maxEffective = resolveCalculableValue(pool.max);
+
+  const baseWithTemp = maxEffective + pool.temp;
+  const nextLost = safeTarget < baseWithTemp ? baseWithTemp - safeTarget : 0;
+  const nextHealed = safeTarget > baseWithTemp ? safeTarget - baseWithTemp : 0;
+
+  return {
+    ...sheet,
+    vitals: {
+      ...sheet.vitals,
+      [resource]: {
+        ...pool,
+        lost: nextLost,
+        healed: nextHealed,
+        current: disableManualOverride(pool.current, true),
+      },
+    },
+  };
+}
+
+/**
+ * Atualiza o campo máximo de PV ou PE garantindo reação consistente do valor atual
+ * (limpando eventual `usarManual` legado em `current` e reconciliando `healed` provisório
+ * caso o máximo esteja saindo de 0 para um valor positivo).
+ */
+export function applyPoolMaxChange(
+  sheet: FichaPersonagem,
+  resource: 'hp' | 'pe',
+  nextMax: CalculableNumber
+): FichaPersonagem {
+  const pool = sheet.vitals[resource];
+  const oldMax = resolveCalculableValue(pool.max);
+  const newMax = resolveCalculableValue(nextMax);
+  const shouldClearInterimHealed =
+    oldMax === 0 && newMax > 0 && pool.lost === 0 && pool.healed > 0;
+
+  return {
+    ...sheet,
+    vitals: {
+      ...sheet.vitals,
+      [resource]: {
+        ...pool,
+        max: nextMax,
+        ...(shouldClearInterimHealed ? { healed: 0 } : {}),
+        current: pool.current.usarManual
+          ? disableManualOverride(pool.current, true)
+          : pool.current,
+      },
+    },
+  };
+}
+
+/**
+ * Aplica variação incremental (+/-) em Sanidade ou Integridade.
+ */
+export function adjustMentalResource(
+  sheet: FichaPersonagem,
+  resource: 'sanity' | 'integrity',
+  delta: number
+): FichaPersonagem {
+  const pool = sheet.vitals[resource];
+  const currentEffective = resolveCalculableValue(pool.current);
+  const maxEffective = resolveCalculableValue(pool.max);
+
+  if (pool.current.usarManual) {
+    const nextManual = Math.max(0, currentEffective + delta);
+    return {
+      ...sheet,
+      vitals: {
+        ...sheet.vitals,
+        [resource]: {
+          ...pool,
+          current: enableManualOverride(pool.current, nextManual),
+        },
+      },
+    };
+  }
+
+  let nextLost = pool.lost;
+  let nextRecovered = pool.recovered;
+
+  if (delta < 0) {
+    let remainingSpend = Math.abs(delta);
+    if (nextRecovered > 0) {
+      const fromRec = Math.min(nextRecovered, remainingSpend);
+      nextRecovered -= fromRec;
+      remainingSpend -= fromRec;
+    }
+    const maxAllowedLoss = Math.max(0, maxEffective + pool.add + nextRecovered);
+    nextLost = Math.min(maxAllowedLoss, nextLost + remainingSpend);
+  } else if (delta > 0) {
+    const reduceLost = Math.min(nextLost, delta);
+    nextLost -= reduceLost;
+    const leftover = delta - reduceLost;
+    if (leftover > 0 && maxEffective === 0) {
+      nextRecovered += leftover;
+    }
+  }
+
+  return {
+    ...sheet,
+    vitals: {
+      ...sheet.vitals,
+      [resource]: {
+        ...pool,
+        lost: nextLost,
+        recovered: nextRecovered,
+      },
+    },
+  };
+}
+
+/**
+ * Define diretamente o valor atual desejado de Sanidade ou Integridade.
+ */
+export function setMentalResourceCurrent(
+  sheet: FichaPersonagem,
+  resource: 'sanity' | 'integrity',
+  targetValue: number
+): FichaPersonagem {
+  const safeTarget = Math.max(0, targetValue);
+  const pool = sheet.vitals[resource];
+  const maxEffective = resolveCalculableValue(pool.max);
+
+  if (pool.current.usarManual) {
+    return {
+      ...sheet,
+      vitals: {
+        ...sheet.vitals,
+        [resource]: {
+          ...pool,
+          current: enableManualOverride(pool.current, safeTarget),
+        },
+      },
+    };
+  }
+
+  const baseWithAdd = maxEffective + pool.add;
+  const nextLost = safeTarget < baseWithAdd ? baseWithAdd - safeTarget : 0;
+  const nextRecovered = safeTarget > baseWithAdd ? safeTarget - baseWithAdd : 0;
+
+  return {
+    ...sheet,
+    vitals: {
+      ...sheet.vitals,
+      [resource]: {
+        ...pool,
+        lost: nextLost,
+        recovered: nextRecovered,
+      },
+    },
   };
 }

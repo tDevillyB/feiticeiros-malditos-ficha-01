@@ -1,11 +1,43 @@
 import type {
   AttributeKey,
+  CharacterRecordData,
   DamageTypeKey,
   FichaPersonagem,
   ProficiencyRollEntry,
+  ReleaseTechniqueSlot,
   SimpleConditionKey,
 } from '../types/character';
 import { createCalculableField, recalculateCharacterSheet } from '../utils/calculations';
+
+export function createBlankCharacterRecord(): CharacterRecordData {
+  return {
+    age: '',
+    height: '',
+    weight: '',
+    gender: '',
+    hair: '',
+    eyes: '',
+    traits: '',
+    personality: '',
+    ideals: '',
+    history: '',
+  };
+}
+
+export function createDefaultReleaseSlots(): ReleaseTechniqueSlot[] {
+  return ([1, 2, 3, 4] as const).map((slotNumber) => ({
+    id: `release-slot-${slotNumber}`,
+    slotNumber,
+    unlocked: false,
+    name: '',
+    peCost: createCalculableField(0),
+    actionType: '',
+    range: '',
+    duration: '',
+    damageOrEffect: '',
+    description: '',
+  }));
+}
 
 const SIMPLE_CONDITIONS: SimpleConditionKey[] = [
   'Abalado',
@@ -119,11 +151,14 @@ export function createVanillaBlankSheet(initialTitle = ''): FichaPersonagem {
       linkedTokenIds: [],
       lockedByGM: false,
       sharedWithPlayerIds: [],
+      allowOtherPlayersViewSheet: false,
+      allowOtherPlayersViewCombatCenter: false,
     },
     identity: {
       name: initialTitle,
       player: '',
       campaign: '',
+      avatarUrl: '',
       level: createCalculableField(1),
       trainingBonus: createCalculableField(2),
       experience: createCalculableField(0),
@@ -399,6 +434,7 @@ export function createVanillaBlankSheet(initialTitle = ''): FichaPersonagem {
       cursedAptitudes: [],
       auraAptitudes: [],
       controlAndReading: [],
+      barrierAptitudes: [],
       reverseEnergyAptitudes: [],
       reverseEnergyNotes: '',
       barrier: {
@@ -427,14 +463,22 @@ export function createVanillaBlankSheet(initialTitle = ''): FichaPersonagem {
         damageOrEffect: '',
         description: '',
       },
+      releaseSlots: createDefaultReleaseSlots(),
+      curseControlEnabled: false,
     },
     summons: [],
+    controlledCurses: [],
+    characterRecord: createBlankCharacterRecord(),
     inventory: {
+      weightLimit: createCalculableField(10),
+      weightBonus: 0,
+      currentWeight: createCalculableField(0),
       spaceLimit: createCalculableField(10),
       spaceBonus: 0,
       occupiedSpaces: createCalculableField(0),
       totalInventoryValue: createCalculableField(0),
       items: [],
+      equipments: [],
       weapons: [],
       armors: [],
       shields: [],

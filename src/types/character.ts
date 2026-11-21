@@ -94,6 +94,7 @@ export interface IdentityData {
   name: string;
   player: string;
   campaign: string;
+  avatarUrl?: string;
   level: CalculableNumber;
   trainingBonus: CalculableNumber;
   experience: CalculableNumber;
@@ -422,6 +423,19 @@ export interface MaximumReleaseData {
   description: string;
 }
 
+export interface ReleaseTechniqueSlot {
+  id: string;
+  slotNumber: 1 | 2 | 3 | 4;
+  unlocked: boolean;
+  name: string;
+  peCost: CalculableNumber;
+  actionType: string;
+  range: string;
+  duration: string;
+  damageOrEffect: string;
+  description: string;
+}
+
 export interface CursedProfileData {
   techniqueName: string;
   techniqueDescription: string;
@@ -435,12 +449,17 @@ export interface CursedProfileData {
   cursedAptitudes: AptitudeEntry[];
   auraAptitudes: AptitudeEntry[];
   controlAndReading: AptitudeEntry[];
+  barrierAptitudes?: AptitudeEntry[];
   reverseEnergyAptitudes: AptitudeEntry[];
   reverseEnergyNotes: string;
   barrier: BarrierData;
   domainExpansion: DomainExpansionData;
   passiveAbilities: PassiveAbilityEntry[];
   maximumRelease: MaximumReleaseData;
+  /** Exatamente 4 slots fixos independentes para Liberação */
+  releaseSlots?: ReleaseTechniqueSlot[];
+  /** @deprecated Unificado em Shikigamis (`sheet.summons`) */
+  curseControlEnabled?: boolean;
 }
 
 // ============================================================================
@@ -466,9 +485,39 @@ export interface SummonAbilityEntry {
   description: string;
 }
 
+export type ShikigamiActionComplexity = 'simples' | 'complexa';
+
+export interface ShikigamiActionEntry {
+  id: string;
+  name: string;
+  complexity: ShikigamiActionComplexity;
+  actionType: string;
+  hitBonus: string;
+  damage: string;
+  critical: string;
+  damageType: string;
+  range: string;
+  effects: string;
+  description: string;
+}
+
+export type ShikigamiCharacteristicKind =
+  | 'passiva'
+  | 'particularidade'
+  | 'efeito_permanente'
+  | 'propriedade';
+
+export interface ShikigamiCharacteristicEntry {
+  id: string;
+  name: string;
+  kind: ShikigamiCharacteristicKind;
+  description: string;
+}
+
 export interface SummonEntry {
   id: string;
   name: string;
+  imageUrl?: string;
   grade: string;
   summonType: string;
   isActive: boolean;
@@ -481,7 +530,8 @@ export interface SummonEntry {
     temp: number;
     lost: number;
   };
-  pe: {
+  /** @deprecated Shikigamis não utilizam PE; mantido opcional apenas para compatibilidade de leitura */
+  pe?: {
     current: CalculableNumber;
     max: CalculableNumber;
   };
@@ -490,17 +540,82 @@ export interface SummonEntry {
   initiative: CalculableNumber;
   attributes: Record<AttributeKey, { value: number; modifier: CalculableNumber }>;
   skills: ProficiencyRollEntry[];
+  /** Ações utilizáveis (Simples / Complexas) */
+  actions?: ShikigamiActionEntry[];
+  /** Características passivas, particularidades, efeitos permanentes e propriedades */
+  characteristics?: ShikigamiCharacteristicEntry[];
+  /** @deprecated Migrado para `actions` */
   attacks: SummonAttackEntry[];
+  /** @deprecated Migrado para `actions` */
   abilities: SummonAbilityEntry[];
+  /** Redução de Dano Natural (RD) do Shikigami */
   damageReduction: CalculableNumber;
   resistances: string[];
   immunities: string[];
+  conditions?: SimpleConditionKey[];
+  notes: string;
+}
+
+// ============================================================================
+// 7.1 CONTROLE DE MALDIÇÕES (PERFIS SIMPLIFICADOS E REUTILIZÁVEIS)
+// ============================================================================
+
+export interface ControlledCurseAttack {
+  id: string;
+  name: string;
+  hit: string;
+  damage: string;
+  damageType: string;
+  range: string;
+}
+
+export interface ControlledCurseAbility {
+  id: string;
+  name: string;
+  cost: string;
+  description: string;
+}
+
+export interface ControlledCurseProfile {
+  id: string;
+  name: string;
+  imageUrl?: string;
+  grade: string;
+  category: string;
+  isActive: boolean;
+  hp: {
+    current: number;
+    max: number;
+  };
+  pe?: {
+    current: number;
+    max: number;
+  };
+  attributes: Partial<Record<AttributeKey, number>>;
+  defense: number;
+  movement: number;
+  attacks: ControlledCurseAttack[];
+  abilities: ControlledCurseAbility[];
+  conditions: SimpleConditionKey[];
   notes: string;
 }
 
 // ============================================================================
 // 8. REGISTRO E INVENTÁRIO
 // ============================================================================
+
+export interface CharacterRecordData {
+  age: string;
+  height: string;
+  weight: string;
+  gender: string;
+  hair: string;
+  eyes: string;
+  traits: string;
+  personality: string;
+  ideals: string;
+  history: string;
+}
 
 export type InventoryCategory =
   | 'item'
@@ -519,10 +634,62 @@ export interface InventoryItem {
   quantity: number;
   unitCost: number;
   totalCost: CalculableNumber;
+  /** Peso unitário do item */
+  unitWeight?: number;
+  /** Peso total calculado (`quantity * unitWeight`) */
+  totalWeight?: CalculableNumber;
+  /** @deprecated Mantido apenas para migração de dados antigos */
   unitSpaces: number;
+  /** @deprecated Mantido apenas para migração de dados antigos */
   totalSpaces: CalculableNumber;
   equipped: boolean;
   grade?: string;
+  description: string;
+}
+
+export type EquipmentCategory =
+  | 'ferramenta_amaldicoada'
+  | 'arma'
+  | 'uniforme'
+  | 'armadura'
+  | 'escudo'
+  | 'equipamento_especial';
+
+export interface EquipmentEnchantment {
+  id: string;
+  name: string;
+  effect: string;
+}
+
+export interface EquipmentCustomField {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface CustomEquipmentEntry {
+  id: string;
+  name: string;
+  category: EquipmentCategory;
+  subType: string;
+  grade: string;
+  imageUrl?: string;
+  equipped: boolean;
+  weight: number;
+  cost: number;
+  damage?: string;
+  critical?: string;
+  range?: string;
+  weaponType?: string;
+  defense?: string;
+  defensiveBonus?: string;
+  rd?: string;
+  resistances?: string;
+  effects?: string;
+  bonus: string;
+  properties: string;
+  customFields?: EquipmentCustomField[];
+  enchantments: EquipmentEnchantment[];
   description: string;
 }
 
@@ -579,13 +746,27 @@ export interface SpecialRecordEntry {
 }
 
 export interface InventoryData {
+  /** Limite de carga (peso) */
+  weightLimit?: CalculableNumber;
+  /** Bônus adicional no limite de carga (peso) */
+  weightBonus?: number;
+  /** Peso total carregado atualmente */
+  currentWeight?: CalculableNumber;
+  /** @deprecated Espelhado com `weightLimit` para compatibilidade */
   spaceLimit: CalculableNumber;
+  /** @deprecated Espelhado com `weightBonus` para compatibilidade */
   spaceBonus: number;
+  /** @deprecated Espelhado com `currentWeight` para compatibilidade */
   occupiedSpaces: CalculableNumber;
   totalInventoryValue: CalculableNumber;
   items: InventoryItem[];
+  /** Sistema de cards de equipamentos personalizáveis */
+  equipments?: CustomEquipmentEntry[];
+  /** @deprecated Migrado para `equipments` quando não inicializado */
   weapons: WeaponRecord[];
+  /** @deprecated Migrado para `equipments` quando não inicializado */
   armors: ArmorRecord[];
+  /** @deprecated Migrado para `equipments` quando não inicializado */
   shields: ShieldRecord[];
   specialCharacteristics: SpecialRecordEntry[];
   specialAbilities: SpecialRecordEntry[];
@@ -716,6 +897,10 @@ export interface CharacterPermissions {
   lockedByGM: boolean;
   /** Jogadores específicos autorizados a visualizar ou editar */
   sharedWithPlayerIds: string[];
+  /** Permite que outros jogadores visualizem a ficha completa (somente leitura) */
+  allowOtherPlayersViewSheet?: boolean;
+  /** Permite que outros jogadores visualizem a Central de Combate (somente leitura) */
+  allowOtherPlayersViewCombatCenter?: boolean;
 }
 
 export interface CharacterSheet {
@@ -751,10 +936,14 @@ export interface CharacterSheet {
   /** Aba 2: Perfil Amaldiçoado */
   cursedProfile: CursedProfileData;
 
-  /** Aba 3: Invocações */
+  /** Aba 3: Shikigamis */
   summons: SummonEntry[];
 
+  /** @deprecated Migrado automaticamente para `summons` (Shikigamis) */
+  controlledCurses?: ControlledCurseProfile[];
+
   /** Aba 4: Registro e Inventário */
+  characterRecord?: CharacterRecordData;
   inventory: InventoryData;
 
   /** Aba 5: Treinamentos */
@@ -766,3 +955,38 @@ export interface CharacterSheet {
 
 /** Alias em português para a interface raiz da ficha de personagem */
 export type FichaPersonagem = CharacterSheet;
+
+// ============================================================================
+// 12. RESUMO COMPARTILHADO DO ESCUDO DO MESTRE (OBR ROOM METADATA)
+// ============================================================================
+
+export interface SharedCharacterSummary {
+  sheetId: string;
+  ownerPlayerId: string | null;
+  ownerPlayerName: string;
+  name: string;
+  playerName: string;
+  avatarUrl?: string;
+  grade: string;
+  level: number;
+  specialization: string;
+  hpCurrent: number;
+  hpMax: number;
+  hpPercentage: number;
+  peCurrent: number;
+  peMax: number;
+  pePercentage: number;
+  activeConditions: SimpleConditionKey[];
+  bleeding: BleedingSeverity | null;
+  freezing: FreezingSeverity | null;
+  lockedByGM: boolean;
+  allowOtherPlayersViewSheet?: boolean;
+  allowOtherPlayersViewCombatCenter?: boolean;
+  updatedAt: string;
+}
+
+export interface SharedTableState {
+  version: number;
+  updatedAt: string;
+  summaries: Record<string, SharedCharacterSummary>;
+}

@@ -1,0 +1,76 @@
+import type {
+  BleedingSeverity,
+  FreezingSeverity,
+  SimpleConditionKey,
+} from '../types/character';
+
+export const SIMPLE_CONDITION_LIST: SimpleConditionKey[] = [
+  'Abalado',
+  'Agarrado',
+  'Amedrontado',
+  'Atordoado',
+  'Caído',
+  'Cego',
+  'Aterrorizado',
+  'Condenado',
+  'Confuso',
+  'Desorientado',
+  'Desprevenido',
+  'Enfeitiçado',
+  'Enjoado',
+  'Engasgando',
+  'Enredado',
+  'Envenenado',
+  'Exposto',
+  'Fragilizado',
+  'Imóvel',
+  'Inconsciente',
+  'Indefeso',
+  'Lento',
+  'Paralisado',
+  'Surdo',
+  'Sofrendo',
+  'Surpreso',
+];
+
+export const CONDITION_DESCRIPTIONS: Record<SimpleConditionKey, string> = {
+  Abalado: 'Sofre penalidade em testes devido ao medo ou abalo psicológico.',
+  Agarrado: 'Deslocamento reduzido a 0m e sofre desvantagem para atacar alvos fora do agarrão.',
+  Amedrontado: 'Não pode se aproximar voluntariamente da fonte do medo e sofre penalidades.',
+  Atordoado: 'Incapaz de agir, fica desprevenido e falha automaticamente em testes físicos indicados.',
+  Caído: 'Deslocamento reduzido rastejando; ataques corpo a corpo contra o alvo ganham vantagem.',
+  Cego: 'Não enxerga, falha em testes dependentes de visão e sofre desvantagem em ataques.',
+  Aterrorizado: 'Forma severa de medo; tende a fugir da fonte e sofre penalidades acentuadas.',
+  Condenado: 'Marcado por efeito fatal ou maldição grave que ameaça a vida/integridade.',
+  Confuso: 'Comportamento imprevisível a cada turno conforme a tabela/efeito da habilidade.',
+  Desorientado: 'Perde noção espacial/tática, sofrendo penalidades em reações e testes.',
+  Desprevenido: 'Sem defesa ativa completa contra ataques ou efeitos súbitos.',
+  Enfeitiçado: 'Influenciado mentalmente pelo conjurador, incapaz de atacá-lo diretamente.',
+  Enjoado: 'Ações restritas por mal-estar intenso; dificuldade para manter concentração.',
+  Engasgando: 'Sem fôlego ou impedido de falar/respirar normalmente.',
+  Enredado: 'Preso parcialmente; deslocamento reduzido e penalidade em testes de Destreza.',
+  Envenenado: 'Sob efeito de toxina/veneno, sofrendo penalidades e efeitos contínuos.',
+  Exposto: 'Defesa reduzida ou vulnerável a acertos críticos e ataques diretos.',
+  Fragilizado: 'Recebe maior impacto de danos ou sofre penalidade em testes de resistência.',
+  Imóvel: 'Deslocamento reduzido a 0m, não podendo sair do espaço atual.',
+  Inconsciente: 'Indefeso e incapaz de agir ou perceber o ambiente.',
+  Indefeso: 'Não consegue se defender; ataques recebem bônus/vantagem ou acerto facilitado.',
+  Lento: 'Deslocamento reduzido à metade e ações limitadas.',
+  Paralisado: 'Imóvel, incapaz de realizar ações físicas e considerado indefeso.',
+  Surdo: 'Não ouve, falhando automaticamente em testes baseados em audição.',
+  Sofrendo: 'Sofrendo dano contínuo ou penalidade persistente por efeito ativo.',
+  Surpreso: 'Não pode agir ou reagir durante a rodada de surpresa.',
+};
+
+export const BLEEDING_DESCRIPTIONS: Record<BleedingSeverity, string> = {
+  Fraco: 'Sangramento leve contínuo aplicado manualmente pelo Mestre.',
+  Médio: 'Sangramento moderado contínuo até ser estancado.',
+  Forte: 'Sangramento grave com perda relevante de PV.',
+  Extremo: 'Hemorragia crítica que exige tratamento imediato.',
+};
+
+export const FREEZING_DESCRIPTIONS: Record<FreezingSeverity, string> = {
+  Leve: 'Frio intenso reduzindo mobilidade e destreza.',
+  Médio: 'Congelamento parcial limitando ações e deslocamento.',
+  Total: 'Alvo completamente congelado e imobilizado.',
+};

@@ -1,14 +1,41 @@
-import { useEffect, useState } from 'react';
-import { Copy, Download, Lock, Plus, Shield, Trash2, Unlock, Upload } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Copy,
+  Download,
+  Lock,
+  Plus,
+  Shield,
+  Trash2,
+  Unlock,
+  Upload,
+} from 'lucide-react';
+import { GradeBadge } from './components/GradeBadge';
 import { CursedProfileTab } from './components/tabs/CursedProfileTab';
 import { InventoryTab } from './components/tabs/InventoryTab';
+import { MasterShieldTab } from './components/tabs/MasterShieldTab';
 import { PersonalSheetTab } from './components/tabs/PersonalSheetTab';
 import { SummonsTab } from './components/tabs/SummonsTab';
 import { TrainingsTab } from './components/tabs/TrainingsTab';
 import { WalletTab } from './components/tabs/WalletTab';
 import { createVanillaBlankSheet } from './data/vanillaTemplate';
-import type { FichaPersonagem } from './types/character';
+import {
+  initOBRSession,
+  normalizeSyncedSheet,
+  removeSharedSummaryFromRoom,
+  savePrivacySettingsToPlayerMetadata,
+  sendOBRSyncMessage,
+  upsertSharedSummaryInRoom,
+  type OBRSessionContext,
+  type OBRSyncMessage,
+} from './services/obrSync';
+import type { FichaPersonagem, SharedCharacterSummary } from './types/character';
 import { recalculateCharacterSheet, resolveCalculableValue } from './utils/calculations';
+import {
+  evaluateSheetAccess,
+  evaluateSheetAccessFromSheet,
+  sanitizeSheetForCombatCenterOnly,
+  type SheetAccessContext,
+} from './utils/permissions';
 
 type SheetTabId =
   | 'pessoal'
@@ -16,17 +43,20 @@ type SheetTabId =
   | 'invocacoes'
   | 'inventario'
   | 'treinamentos'
-  | 'carteira';
+  | 'carteira'
+  | 'escudo';
 
 const STORAGE_KEY = 'fm25_obr_vanilla_sheets_v1';
+const GM_REMOTE_CACHE_KEY = 'fm25_obr_gm_remote_sheets_v1';
 
 const TAB_ITEMS: Array<{ id: SheetTabId; label: string }> = [
   { id: 'pessoal', label: 'Ficha Pessoal' },
   { id: 'amaldicoado', label: 'Perfil Amaldiçoado' },
-  { id: 'invocacoes', label: 'Invocações' },
-  { id: 'inventario', label: 'Inventário' },
+  { id: 'invocacoes', label: 'Shikigamis' },
+  { id: 'inventario', label: 'Registro e Inventário' },
   { id: 'treinamentos', label: 'Treinamentos' },
   { id: 'carteira', label: 'Carteira' },
+  { id: 'escudo', label: 'Escudo do Mestre' },
 ];
 
 function loadInitialSheets(): FichaPersonagem[] {
@@ -35,7 +65,7 @@ function loadInitialSheets(): FichaPersonagem[] {
     if (raw) {
       const parsed = JSON.parse(raw) as FichaPersonagem[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((s) => recalculateCharacterSheet(s));
+        return parsed.map((s) => normalizeSyncedSheet(s));
       }
     }
   } catch {
@@ -44,90 +74,1058 @@ function loadInitialSheets(): FichaPersonagem[] {
   return [createVanillaBlankSheet()];
 }
 
+function loadGmCachedSheets(): FichaPersonagem[] {
+  try {
+    const raw = localStorage.getItem(GM_REMOTE_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as FichaPersonagem[];
+      if (Array.isArray(parsed)) {
+        return parsed.map((s) => normalizeSyncedSheet(s));
+      }
+    }
+  } catch {
+    // Ignora erro de cache local
+  }
+  return [];
+}
+
 export default function App() {
-  const [sheets, setSheets] = useState<FichaPersonagem[]>(() => loadInitialSheets());
+  const [localSheets, setLocalSheets] = useState<FichaPersonagem[]>(() => loadInitialSheets());
+  const [gmCachedSheets, setGmCachedSheets] = useState<FichaPersonagem[]>(() =>
+    loadGmCachedSheets()
+  );
+  const [remoteSharedSheets, setRemoteSharedSheets] = useState<FichaPersonagem[]>([]);
+  const [sharedSummaries, setSharedSummaries] = useState<Record<string, SharedCharacterSummary>>(
+    {}
+  );
+  const [obrCtx, setObrCtx] = useState<OBRSessionContext>({
+    isInsideOBR: false,
+    isReady: false,
+    playerId: null,
+    playerName: '',
+    role: null,
+    party: [],
+    privacyBySheetId: {},
+  });
+
   const [activeSheetId, setActiveSheetId] = useState<string>(
-    () => sheets[0]?.id ?? ''
+    () => localSheets[0]?.id ?? ''
+  );
+  const [selectedControlSheetId, setSelectedControlSheetId] = useState<string>(
+    () => localSheets[0]?.id ?? ''
   );
   const [activeTab, setActiveTab] = useState<SheetTabId>('pessoal');
-  const [viewerRole, setViewerRole] = useState<'GM' | 'PLAYER'>('GM');
+  const [requestedShieldSubView, setRequestedShieldSubView] = useState<{
+    view: 'overview' | 'control';
+    nonce: number;
+  } | null>(null);
+  const [localFallbackRole, setLocalFallbackRole] = useState<'GM' | 'PLAYER'>('GM');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
+  const viewerRole: 'GM' | 'PLAYER' = obrCtx.isInsideOBR
+    ? obrCtx.role ?? 'PLAYER'
+    : localFallbackRole;
+
+  const localSheetsRef = useRef(localSheets);
+  localSheetsRef.current = localSheets;
+  const gmCachedSheetsRef = useRef(gmCachedSheets);
+  gmCachedSheetsRef.current = gmCachedSheets;
+  const remoteSharedSheetsRef = useRef(remoteSharedSheets);
+  remoteSharedSheetsRef.current = remoteSharedSheets;
+  const sharedSummariesRef = useRef(sharedSummaries);
+  sharedSummariesRef.current = sharedSummaries;
+  const obrCtxRef = useRef(obrCtx);
+  obrCtxRef.current = obrCtx;
+  const viewerRoleRef = useRef(viewerRole);
+  viewerRoleRef.current = viewerRole;
+  const didInitialRoomSyncRef = useRef(false);
+  const prevPartyCountRef = useRef(0);
+
+  const showToast = useCallback((msg: string) => {
+    setFeedbackMessage(msg);
+    setTimeout(() => setFeedbackMessage(null), 3200);
+  }, []);
+
+  const localSheetIds = useMemo(
+    () => new Set(localSheets.map((s) => s.id)),
+    [localSheets]
+  );
+
+  const accessContext: SheetAccessContext = useMemo(
+    () => ({
+      viewerRole,
+      currentPlayerId: obrCtx.playerId,
+      isInsideOBR: obrCtx.isInsideOBR,
+      localSheetIds,
+    }),
+    [viewerRole, obrCtx.playerId, obrCtx.isInsideOBR, localSheetIds]
+  );
+
+  // Lista da sessão conforme papel:
+  // - Mestre: fichas locais + cache de fichas remotas dos jogadores
+  // - Jogador: fichas locais + apenas fichas explicitamente compartilhadas por outros jogadores (em memória e sanitizadas se apenas Central de Combate)
+  const sessionSheets = useMemo(() => {
+    if (viewerRole === 'GM') {
+      const byId = new Map<string, FichaPersonagem>();
+      for (const s of gmCachedSheets) {
+        byId.set(s.id, s);
+      }
+      for (const s of localSheets) {
+        const existing = byId.get(s.id);
+        if (!existing || s.updatedAt >= existing.updatedAt) {
+          byId.set(s.id, s);
+        }
+      }
+      return Array.from(byId.values());
+    }
+
+    const byId = new Map<string, FichaPersonagem>();
+    for (const s of localSheets) {
+      byId.set(s.id, s);
+    }
+    for (const remote of remoteSharedSheets) {
+      if (byId.has(remote.id)) continue;
+      const roomSummary = sharedSummaries[remote.id];
+      const useRoomFlags = Boolean(roomSummary && roomSummary.updatedAt >= remote.updatedAt);
+      const allowSheet = useRoomFlags
+        ? Boolean(roomSummary?.allowOtherPlayersViewSheet)
+        : Boolean(remote.permissions.allowOtherPlayersViewSheet);
+      const allowCombat = useRoomFlags
+        ? Boolean(roomSummary?.allowOtherPlayersViewCombatCenter)
+        : Boolean(remote.permissions.allowOtherPlayersViewCombatCenter);
+
+      if (!allowSheet && !allowCombat) continue;
+
+      const syncedRemote: FichaPersonagem = {
+        ...remote,
+        permissions: {
+          ...remote.permissions,
+          allowOtherPlayersViewSheet: allowSheet,
+          allowOtherPlayersViewCombatCenter: allowCombat,
+        },
+      };
+      byId.set(
+        remote.id,
+        allowSheet ? syncedRemote : sanitizeSheetForCombatCenterOnly(syncedRemote)
+      );
+    }
+    return Array.from(byId.values());
+  }, [viewerRole, localSheets, gmCachedSheets, remoteSharedSheets, sharedSummaries]);
+
+  const accessibleFullSheets = useMemo(
+    () =>
+      sessionSheets.filter(
+        (s) =>
+          evaluateSheetAccessFromSheet(s, accessContext, sharedSummaries[s.id])
+            .canViewFullSheet
+      ),
+    [sessionSheets, accessContext, sharedSummaries]
+  );
+
   const activeSheet =
-    sheets.find((s) => s.id === activeSheetId) ?? sheets[0] ?? createVanillaBlankSheet();
+    accessibleFullSheets.find((s) => s.id === activeSheetId) ??
+    accessibleFullSheets[0] ??
+    localSheets[0] ??
+    createVanillaBlankSheet();
+
+  const activePolicy = useMemo(
+    () =>
+      evaluateSheetAccessFromSheet(
+        activeSheet,
+        accessContext,
+        sharedSummaries[activeSheet.id]
+      ),
+    [activeSheet, accessContext, sharedSummaries]
+  );
+
+  const isLocalActiveSheet = localSheets.some((s) => s.id === activeSheet.id);
+
+  // Se o acesso à ficha ativa for revogado ou o papel mudar, redireciona imediatamente para uma ficha permitida
+  useEffect(() => {
+    if (accessibleFullSheets.length > 0 && activeSheet.id !== activeSheetId) {
+      setActiveSheetId(activeSheet.id);
+    }
+  }, [accessibleFullSheets, activeSheet.id, activeSheetId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sheets));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localSheets));
     } catch {
       // Ignora erro de quota caso navegador restrinja storage
     }
-  }, [sheets]);
+  }, [localSheets]);
 
-  const showToast = (msg: string) => {
-    setFeedbackMessage(msg);
-    setTimeout(() => setFeedbackMessage(null), 3200);
-  };
+  useEffect(() => {
+    try {
+      localStorage.setItem(GM_REMOTE_CACHE_KEY, JSON.stringify(gmCachedSheets));
+    } catch {
+      // Ignora erro de quota caso navegador restrinja storage
+    }
+  }, [gmCachedSheets]);
+
+  // Remove imediatamente da memória do jogador qualquer ficha remota cuja permissão tenha sido revogada nos metadados da sala
+  useEffect(() => {
+    if (viewerRole === 'GM') return;
+    setRemoteSharedSheets((prev) => {
+      let changed = false;
+      const next: FichaPersonagem[] = [];
+
+      for (const s of prev) {
+        const summary = sharedSummaries[s.id];
+        if (!summary) {
+          next.push(s);
+          continue;
+        }
+        const allowSheet =
+          summary.updatedAt >= s.updatedAt
+            ? Boolean(summary.allowOtherPlayersViewSheet)
+            : Boolean(s.permissions.allowOtherPlayersViewSheet);
+        const allowCombat =
+          summary.updatedAt >= s.updatedAt
+            ? Boolean(summary.allowOtherPlayersViewCombatCenter)
+            : Boolean(s.permissions.allowOtherPlayersViewCombatCenter);
+
+        if (!allowSheet && !allowCombat) {
+          changed = true;
+          continue;
+        }
+
+        if (
+          allowSheet !== Boolean(s.permissions.allowOtherPlayersViewSheet) ||
+          allowCombat !== Boolean(s.permissions.allowOtherPlayersViewCombatCenter)
+        ) {
+          changed = true;
+          const updatedPerms: FichaPersonagem = {
+            ...s,
+            permissions: {
+              ...s.permissions,
+              allowOtherPlayersViewSheet: allowSheet,
+              allowOtherPlayersViewCombatCenter: allowCombat,
+            },
+          };
+          next.push(
+            allowSheet ? updatedPerms : sanitizeSheetForCombatCenterOnly(updatedPerms)
+          );
+        } else {
+          next.push(s);
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [sharedSummaries, viewerRole]);
+
+  // Garante seleção válida na Central de Combate
+  useEffect(() => {
+    if (
+      sessionSheets.length > 0 &&
+      !sessionSheets.some((s) => s.id === selectedControlSheetId)
+    ) {
+      setSelectedControlSheetId(sessionSheets[0].id);
+    }
+  }, [sessionSheets, selectedControlSheetId]);
+
+  const publishOwnedSheetsToRoom = useCallback(
+    async (
+      sheetsToPublish: FichaPersonagem[],
+      options?: { forceFullForGM?: boolean }
+    ) => {
+      const ctx = obrCtxRef.current;
+      if (!ctx.isInsideOBR || !ctx.isReady || !ctx.playerId) return;
+
+      const ownedSheets = sheetsToPublish.filter(
+        (sheet) =>
+          sheet.permissions.ownerPlayerId === null ||
+          sheet.permissions.ownerPlayerId === ctx.playerId
+      );
+      if (ownedSheets.length === 0) return;
+
+      try {
+        await savePrivacySettingsToPlayerMetadata(ownedSheets, ctx.playerId);
+      } catch {
+        // Ignora erro transitório ao salvar metadados do jogador
+      }
+
+      const hasOnlineGM =
+        Boolean(options?.forceFullForGM) ||
+        ctx.party.some((p) => p.role === 'GM');
+
+      for (const sheet of ownedSheets) {
+        const allowSheet = Boolean(sheet.permissions.allowOtherPlayersViewSheet);
+        const allowCombat = Boolean(sheet.permissions.allowOtherPlayersViewCombatCenter);
+
+        try {
+          await upsertSharedSummaryInRoom(sheet);
+
+          if (hasOnlineGM || allowSheet) {
+            await sendOBRSyncMessage({
+              type: 'FULL_SHEET_SYNC',
+              sheet,
+              senderId: ctx.playerId,
+              sentAt: new Date().toISOString(),
+            });
+          } else if (allowCombat) {
+            await sendOBRSyncMessage({
+              type: 'FULL_SHEET_SYNC',
+              sheet: sanitizeSheetForCombatCenterOnly(sheet),
+              senderId: ctx.playerId,
+              sentAt: new Date().toISOString(),
+            });
+          }
+        } catch {
+          // Falha silenciosa em caso de desconexão transitória do canal OBR
+        }
+      }
+    },
+    []
+  );
+
+  // Inicializa conexão com SDK do Owlbear Rodeo
+  useEffect(() => {
+    const cleanup = initOBRSession({
+      onContextChange: (nextCtx) => {
+        setObrCtx(nextCtx);
+      },
+      onTableStateChange: (tableState) => {
+        setSharedSummaries(tableState.summaries);
+      },
+      onSyncMessage: (msg: OBRSyncMessage, _connectionId, verifiedSender) => {
+        const ctx = obrCtxRef.current;
+        const currentRole = ctx.isInsideOBR ? ctx.role ?? 'PLAYER' : viewerRoleRef.current;
+
+        if (msg.type === 'REQUEST_FULL_SHEETS') {
+          const requesterIsGM = ctx.isInsideOBR
+            ? verifiedSender
+              ? verifiedSender.role === 'GM'
+              : ctx.party.some((p) => p.role === 'GM')
+            : msg.requesterRole === 'GM';
+
+          void publishOwnedSheetsToRoom(localSheetsRef.current, {
+            forceFullForGM: requesterIsGM,
+          });
+
+          // Se este cliente for Mestre e tiver atualizações mais recentes de fichas remotas, reenvia
+          if (currentRole === 'GM' && ctx.playerId) {
+            for (const cached of gmCachedSheetsRef.current) {
+              if (
+                cached.permissions.ownerPlayerId === msg.requesterId ||
+                cached.permissions.allowOtherPlayersViewSheet ||
+                cached.permissions.allowOtherPlayersViewCombatCenter
+              ) {
+                void sendOBRSyncMessage({
+                  type: 'GM_SHEET_UPDATE',
+                  sheet: cached,
+                  gmId: ctx.playerId,
+                  sentAt: new Date().toISOString(),
+                });
+              }
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'FULL_SHEET_SYNC') {
+          const normalized = normalizeSyncedSheet(msg.sheet);
+
+          if (ctx.isInsideOBR) {
+            if (ctx.party.length > 0 && !verifiedSender) return;
+            if (
+              verifiedSender &&
+              normalized.permissions.ownerPlayerId &&
+              normalized.permissions.ownerPlayerId !== verifiedSender.id &&
+              verifiedSender.role !== 'GM'
+            ) {
+              return;
+            }
+          }
+
+          // Se for Mestre, armazena/atualiza ficha do jogador no cache da sessão
+          if (currentRole === 'GM') {
+            const isLocal = localSheetsRef.current.some((s) => s.id === normalized.id);
+            if (!isLocal) {
+              const existingCached = gmCachedSheetsRef.current.find(
+                (s) => s.id === normalized.id
+              );
+
+              if (existingCached && existingCached.updatedAt > normalized.updatedAt) {
+                // O Mestre tem edição mais recente em cache: reenvia ao jogador
+                if (ctx.playerId) {
+                  void sendOBRSyncMessage({
+                    type: 'GM_SHEET_UPDATE',
+                    sheet: existingCached,
+                    gmId: ctx.playerId,
+                    sentAt: new Date().toISOString(),
+                  });
+                }
+              } else {
+                setGmCachedSheets((prev) => {
+                  const idx = prev.findIndex((s) => s.id === normalized.id);
+                  if (idx === -1) return [...prev, normalized];
+                  const copy = [...prev];
+                  copy[idx] = normalized;
+                  return copy;
+                });
+              }
+            }
+            return;
+          }
+
+          // Para Jogadores: só armazena em memória se o proprietário autorizou ficha completa ou Central de Combate
+          if (localSheetsRef.current.some((s) => s.id === normalized.id)) return;
+
+          const roomSummary = sharedSummariesRef.current[normalized.id];
+          const useRoomFlags = Boolean(
+            roomSummary && roomSummary.updatedAt > normalized.updatedAt
+          );
+          const allowSheet = useRoomFlags
+            ? Boolean(roomSummary?.allowOtherPlayersViewSheet)
+            : Boolean(normalized.permissions.allowOtherPlayersViewSheet);
+          const allowCombat = useRoomFlags
+            ? Boolean(roomSummary?.allowOtherPlayersViewCombatCenter)
+            : Boolean(normalized.permissions.allowOtherPlayersViewCombatCenter);
+
+          if (!allowSheet && !allowCombat) {
+            setRemoteSharedSheets((prev) =>
+              prev.filter((s) => s.id !== normalized.id)
+            );
+            return;
+          }
+
+          const payloadForPlayer = allowSheet
+            ? normalized
+            : sanitizeSheetForCombatCenterOnly(normalized);
+
+          setRemoteSharedSheets((prev) => {
+            const idx = prev.findIndex((s) => s.id === payloadForPlayer.id);
+            if (idx === -1) return [...prev, payloadForPlayer];
+            if (prev[idx].updatedAt > payloadForPlayer.updatedAt) return prev;
+            const copy = [...prev];
+            copy[idx] = payloadForPlayer;
+            return copy;
+          });
+          return;
+        }
+
+        if (msg.type === 'GM_SHEET_UPDATE') {
+          if (ctx.isInsideOBR) {
+            if (ctx.party.length > 0 && !verifiedSender) return;
+            if (verifiedSender && verifiedSender.role !== 'GM') return;
+          }
+
+          const normalized = normalizeSyncedSheet(msg.sheet);
+          const hasLocal = localSheetsRef.current.find((s) => s.id === normalized.id);
+
+          if (hasLocal) {
+            if (normalized.updatedAt >= hasLocal.updatedAt) {
+              setLocalSheets((prev) =>
+                prev.map((s) => (s.id === normalized.id ? normalized : s))
+              );
+              showToast('Ficha atualizada pelo Mestre.');
+            }
+          } else if (currentRole === 'GM') {
+            setGmCachedSheets((prev) => {
+              const idx = prev.findIndex((s) => s.id === normalized.id);
+              if (idx === -1) return [...prev, normalized];
+              const copy = [...prev];
+              copy[idx] = normalized;
+              return copy;
+            });
+          } else {
+            const roomSummary = sharedSummariesRef.current[normalized.id];
+            const useRoomFlags = Boolean(
+              roomSummary && roomSummary.updatedAt > normalized.updatedAt
+            );
+            const allowSheet = useRoomFlags
+              ? Boolean(roomSummary?.allowOtherPlayersViewSheet)
+              : Boolean(normalized.permissions.allowOtherPlayersViewSheet);
+            const allowCombat = useRoomFlags
+              ? Boolean(roomSummary?.allowOtherPlayersViewCombatCenter)
+              : Boolean(normalized.permissions.allowOtherPlayersViewCombatCenter);
+
+            if (!allowSheet && !allowCombat) {
+              setRemoteSharedSheets((prev) =>
+                prev.filter((s) => s.id !== normalized.id)
+              );
+            } else {
+              const payloadForPlayer = allowSheet
+                ? normalized
+                : sanitizeSheetForCombatCenterOnly(normalized);
+              setRemoteSharedSheets((prev) => {
+                const idx = prev.findIndex((s) => s.id === payloadForPlayer.id);
+                if (idx === -1) return [...prev, payloadForPlayer];
+                const copy = [...prev];
+                copy[idx] = payloadForPlayer;
+                return copy;
+              });
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'REVOKE_PLAYER_ACCESS') {
+          if (ctx.isInsideOBR && verifiedSender) {
+            if (
+              verifiedSender.id !== msg.senderId &&
+              verifiedSender.role !== 'GM'
+            ) {
+              return;
+            }
+          }
+
+          if (currentRole === 'PLAYER') {
+            setRemoteSharedSheets((prev) => {
+              if (!msg.allowOtherPlayersViewSheet && !msg.allowOtherPlayersViewCombatCenter) {
+                return prev.filter((s) => s.id !== msg.sheetId);
+              }
+              return prev.map((s) => {
+                if (s.id !== msg.sheetId) return s;
+                const updated: FichaPersonagem = {
+                  ...s,
+                  permissions: {
+                    ...s.permissions,
+                    allowOtherPlayersViewSheet: msg.allowOtherPlayersViewSheet,
+                    allowOtherPlayersViewCombatCenter: msg.allowOtherPlayersViewCombatCenter,
+                  },
+                };
+                return msg.allowOtherPlayersViewSheet
+                  ? updated
+                  : sanitizeSheetForCombatCenterOnly(updated);
+              });
+            });
+          }
+          return;
+        }
+
+        if (msg.type === 'REMOVE_SHEET_SYNC') {
+          if (ctx.isInsideOBR && verifiedSender && verifiedSender.role !== 'GM') {
+            const known =
+              gmCachedSheetsRef.current.find((s) => s.id === msg.sheetId) ??
+              remoteSharedSheetsRef.current.find((s) => s.id === msg.sheetId);
+            if (
+              known?.permissions.ownerPlayerId &&
+              known.permissions.ownerPlayerId !== verifiedSender.id
+            ) {
+              return;
+            }
+          }
+
+          setGmCachedSheets((prev) => prev.filter((s) => s.id !== msg.sheetId));
+          setRemoteSharedSheets((prev) => prev.filter((s) => s.id !== msg.sheetId));
+        }
+      },
+    });
+
+    return cleanup;
+  }, [publishOwnedSheetsToRoom, showToast]);
+
+  // Vincula ownerPlayerId nas fichas locais sem dono, reconcilia preferências de privacidade do jogador no OBR e sincroniza com a sala
+  useEffect(() => {
+    if (!obrCtx.isInsideOBR || !obrCtx.isReady || !obrCtx.playerId) return;
+
+    let changed = false;
+    const reconciled = localSheetsRef.current.map((s) => {
+      let next = s;
+      if (s.permissions.ownerPlayerId === null) {
+        changed = true;
+        next = {
+          ...next,
+          permissions: {
+            ...next.permissions,
+            ownerPlayerId: obrCtx.playerId,
+            ownerPlayerName: next.permissions.ownerPlayerName || obrCtx.playerName,
+          },
+        };
+      }
+
+      const privacyRec = obrCtx.privacyBySheetId[s.id];
+      const roomSummary = sharedSummariesRef.current[s.id];
+      const summaryMatchesOwner =
+        roomSummary &&
+        (roomSummary.ownerPlayerId === null ||
+          roomSummary.ownerPlayerId === obrCtx.playerId);
+
+      const useRoomOverSheet =
+        summaryMatchesOwner && roomSummary.updatedAt > next.updatedAt;
+      const usePlayerMetaOverSheet =
+        privacyRec && privacyRec.updatedAt > next.updatedAt;
+
+      if (usePlayerMetaOverSheet || useRoomOverSheet) {
+        const pickRoom =
+          useRoomOverSheet &&
+          (!privacyRec || roomSummary.updatedAt >= privacyRec.updatedAt);
+
+        const nextAllowSheet = pickRoom
+          ? Boolean(roomSummary.allowOtherPlayersViewSheet)
+          : Boolean(privacyRec?.allowOtherPlayersViewSheet);
+        const nextAllowCombat = pickRoom
+          ? Boolean(roomSummary.allowOtherPlayersViewCombatCenter)
+          : Boolean(privacyRec?.allowOtherPlayersViewCombatCenter);
+        const nextUpdatedAt = pickRoom
+          ? roomSummary.updatedAt
+          : privacyRec?.updatedAt || next.updatedAt;
+
+        if (
+          nextAllowSheet !== Boolean(next.permissions.allowOtherPlayersViewSheet) ||
+          nextAllowCombat !==
+            Boolean(next.permissions.allowOtherPlayersViewCombatCenter)
+        ) {
+          changed = true;
+          next = {
+            ...next,
+            updatedAt: nextUpdatedAt,
+            permissions: {
+              ...next.permissions,
+              allowOtherPlayersViewSheet: nextAllowSheet,
+              allowOtherPlayersViewCombatCenter: nextAllowCombat,
+            },
+          };
+        }
+      }
+
+      return next;
+    });
+
+    if (changed) {
+      setLocalSheets(reconciled);
+      void publishOwnedSheetsToRoom(reconciled);
+    } else if (!didInitialRoomSyncRef.current) {
+      void publishOwnedSheetsToRoom(localSheetsRef.current);
+    }
+
+    if (!didInitialRoomSyncRef.current) {
+      didInitialRoomSyncRef.current = true;
+      void sendOBRSyncMessage({
+        type: 'REQUEST_FULL_SHEETS',
+        requesterId: obrCtx.playerId,
+        requesterRole: obrCtx.role ?? 'PLAYER',
+      });
+    }
+  }, [
+    obrCtx.isInsideOBR,
+    obrCtx.isReady,
+    obrCtx.playerId,
+    obrCtx.playerName,
+    obrCtx.role,
+    obrCtx.privacyBySheetId,
+    publishOwnedSheetsToRoom,
+  ]);
+
+  // Quando novos jogadores entram na party, republica fichas autorizadas/próprias e solicita sincronização
+  useEffect(() => {
+    if (!obrCtx.isInsideOBR || !obrCtx.isReady || !obrCtx.playerId) return;
+    if (obrCtx.party.length > prevPartyCountRef.current) {
+      if (obrCtx.role === 'GM') {
+        void sendOBRSyncMessage({
+          type: 'REQUEST_FULL_SHEETS',
+          requesterId: obrCtx.playerId,
+          requesterRole: 'GM',
+        });
+      }
+      void publishOwnedSheetsToRoom(localSheetsRef.current);
+    }
+    prevPartyCountRef.current = obrCtx.party.length;
+  }, [
+    obrCtx.isInsideOBR,
+    obrCtx.isReady,
+    obrCtx.playerId,
+    obrCtx.role,
+    obrCtx.party.length,
+    publishOwnedSheetsToRoom,
+  ]);
+
+  const handleRequestSyncFromRoom = useCallback(() => {
+    if (!obrCtx.isInsideOBR || !obrCtx.isReady || !obrCtx.playerId) return;
+    void publishOwnedSheetsToRoom(localSheetsRef.current);
+    void sendOBRSyncMessage({
+      type: 'REQUEST_FULL_SHEETS',
+      requesterId: obrCtx.playerId,
+      requesterRole: viewerRole,
+    });
+    showToast('Sincronização com a sala solicitada.');
+  }, [obrCtx.isInsideOBR, obrCtx.isReady, obrCtx.playerId, viewerRole, publishOwnedSheetsToRoom, showToast]);
+
+  const handleUpdateSheetById = useCallback(
+    (sheetId: string, updater: (prev: FichaPersonagem) => FichaPersonagem) => {
+      const targetLocal = localSheetsRef.current.find((s) => s.id === sheetId);
+      const now = new Date().toISOString();
+
+      if (targetLocal) {
+        const policy = evaluateSheetAccessFromSheet(
+          targetLocal,
+          accessContext,
+          sharedSummariesRef.current[sheetId]
+        );
+        if (!policy.canEditFullSheet) {
+          return;
+        }
+
+        const updated = recalculateCharacterSheet({
+          ...updater(targetLocal),
+          updatedAt: now,
+        });
+
+        const nextLocalSheets = localSheetsRef.current.map((s) =>
+          s.id === sheetId ? updated : s
+        );
+        localSheetsRef.current = nextLocalSheets;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLocalSheets));
+        } catch {
+          // Ignora erro de quota caso navegador restrinja storage
+        }
+        setLocalSheets(nextLocalSheets);
+
+        if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+          void upsertSharedSummaryInRoom(updated);
+          if (viewerRole === 'GM') {
+            void sendOBRSyncMessage({
+              type: 'GM_SHEET_UPDATE',
+              sheet: updated,
+              gmId: obrCtx.playerId,
+              sentAt: now,
+            });
+          } else {
+            const hasOnlineGM = obrCtx.party.some((p) => p.role === 'GM');
+            const allowSheet = Boolean(updated.permissions.allowOtherPlayersViewSheet);
+            const allowCombat = Boolean(
+              updated.permissions.allowOtherPlayersViewCombatCenter
+            );
+            if (hasOnlineGM || allowSheet) {
+              void sendOBRSyncMessage({
+                type: 'FULL_SHEET_SYNC',
+                sheet: updated,
+                senderId: obrCtx.playerId,
+                sentAt: now,
+              });
+            } else if (allowCombat) {
+              void sendOBRSyncMessage({
+                type: 'FULL_SHEET_SYNC',
+                sheet: sanitizeSheetForCombatCenterOnly(updated),
+                senderId: obrCtx.playerId,
+                sentAt: now,
+              });
+            }
+          }
+        }
+        return;
+      }
+
+      // Edição pelo Mestre de uma ficha remota em cache (jogadores comuns nunca podem editar fichas de terceiros)
+      if (viewerRole === 'GM') {
+        const targetRemote = gmCachedSheetsRef.current.find((s) => s.id === sheetId);
+        if (!targetRemote) return;
+
+        const updated = recalculateCharacterSheet({
+          ...updater(targetRemote),
+          updatedAt: now,
+        });
+
+        const nextGmCachedSheets = gmCachedSheetsRef.current.map((s) =>
+          s.id === sheetId ? updated : s
+        );
+        gmCachedSheetsRef.current = nextGmCachedSheets;
+        try {
+          localStorage.setItem(
+            GM_REMOTE_CACHE_KEY,
+            JSON.stringify(nextGmCachedSheets)
+          );
+        } catch {
+          // Ignora erro de quota caso navegador restrinja storage
+        }
+        setGmCachedSheets(nextGmCachedSheets);
+
+        if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+          void upsertSharedSummaryInRoom(updated);
+          void sendOBRSyncMessage({
+            type: 'GM_SHEET_UPDATE',
+            sheet: updated,
+            gmId: obrCtx.playerId,
+            sentAt: now,
+          });
+        }
+      }
+    },
+    [accessContext, viewerRole, obrCtx.isInsideOBR, obrCtx.isReady, obrCtx.playerId, obrCtx.party]
+  );
+
+  const handleUpdatePrivacy = useCallback(
+    (
+      sheetId: string,
+      patch: {
+        allowOtherPlayersViewSheet?: boolean;
+        allowOtherPlayersViewCombatCenter?: boolean;
+      }
+    ) => {
+      const targetLocal = localSheetsRef.current.find((s) => s.id === sheetId);
+      const targetRemote =
+        !targetLocal && viewerRole === 'GM'
+          ? gmCachedSheetsRef.current.find((s) => s.id === sheetId)
+          : undefined;
+      const target = targetLocal ?? targetRemote;
+      if (!target) return;
+
+      const policy = evaluateSheetAccessFromSheet(
+        target,
+        accessContext,
+        sharedSummariesRef.current[sheetId]
+      );
+      if (!policy.canManagePrivacy) return;
+
+      const now = new Date().toISOString();
+      const nextPermissions = {
+        ...target.permissions,
+        ...patch,
+      };
+      const updated: FichaPersonagem = {
+        ...target,
+        permissions: nextPermissions,
+        updatedAt: now,
+      };
+
+      if (targetLocal) {
+        setLocalSheets((prev) => prev.map((s) => (s.id === sheetId ? updated : s)));
+      } else if (targetRemote && viewerRole === 'GM') {
+        setGmCachedSheets((prev) =>
+          prev.map((s) => (s.id === sheetId ? updated : s))
+        );
+      }
+
+      const allowSheet = Boolean(nextPermissions.allowOtherPlayersViewSheet);
+      const allowCombat = Boolean(nextPermissions.allowOtherPlayersViewCombatCenter);
+
+      if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+        if (targetLocal) {
+          void savePrivacySettingsToPlayerMetadata([updated], obrCtx.playerId);
+        }
+        void upsertSharedSummaryInRoom(updated);
+
+        void sendOBRSyncMessage({
+          type: 'REVOKE_PLAYER_ACCESS',
+          sheetId: updated.id,
+          senderId: obrCtx.playerId,
+          allowOtherPlayersViewSheet: allowSheet,
+          allowOtherPlayersViewCombatCenter: allowCombat,
+        });
+
+        if (allowSheet || allowCombat) {
+          if (viewerRole === 'GM' && !targetLocal) {
+            void sendOBRSyncMessage({
+              type: 'GM_SHEET_UPDATE',
+              sheet: updated,
+              gmId: obrCtx.playerId,
+              sentAt: now,
+            });
+          } else {
+            const hasOnlineGM = obrCtx.party.some((p) => p.role === 'GM');
+            void sendOBRSyncMessage({
+              type: 'FULL_SHEET_SYNC',
+              sheet:
+                hasOnlineGM || allowSheet
+                  ? updated
+                  : sanitizeSheetForCombatCenterOnly(updated),
+              senderId: obrCtx.playerId,
+              sentAt: now,
+            });
+          }
+        }
+      }
+
+      showToast('Preferências de privacidade atualizadas.');
+    },
+    [
+      accessContext,
+      viewerRole,
+      obrCtx.isInsideOBR,
+      obrCtx.isReady,
+      obrCtx.playerId,
+      obrCtx.party,
+      showToast,
+    ]
+  );
+
+  const handleOpenFullSheet = useCallback(
+    (sheetId: string) => {
+      const sheet = sessionSheets.find((s) => s.id === sheetId);
+      const summary = sharedSummaries[sheetId];
+      const policy = sheet
+        ? evaluateSheetAccessFromSheet(sheet, accessContext, summary)
+        : summary
+        ? evaluateSheetAccess(summary, accessContext)
+        : null;
+
+      if (!policy || !policy.canViewFullSheet) {
+        showToast('Acesso negado: o proprietário não liberou a visualização desta ficha.');
+        return;
+      }
+
+      if (!sheet) {
+        handleRequestSyncFromRoom();
+        showToast('Ficha autorizada. Solicitando dados completos ao proprietário...');
+        return;
+      }
+
+      setActiveSheetId(sheetId);
+      setActiveTab('pessoal');
+    },
+    [sessionSheets, sharedSummaries, accessContext, handleRequestSyncFromRoom, showToast]
+  );
 
   const handleUpdateActiveSheet = (
     updater: (prev: FichaPersonagem) => FichaPersonagem
   ) => {
-    setSheets((prevSheets) =>
-      prevSheets.map((s) => {
-        if (s.id !== activeSheet.id) return s;
-        return recalculateCharacterSheet({
-          ...updater(s),
-          updatedAt: new Date().toISOString(),
-        });
-      })
-    );
+    handleUpdateSheetById(activeSheet.id, updater);
   };
 
   const handleCreateSheet = () => {
-    const created = createVanillaBlankSheet();
-    setSheets((prev) => [...prev, created]);
+    const fresh = createVanillaBlankSheet();
+    const created: FichaPersonagem = obrCtx.isInsideOBR
+      ? {
+          ...fresh,
+          permissions: {
+            ...fresh.permissions,
+            ownerPlayerId: obrCtx.playerId,
+            ownerPlayerName: obrCtx.playerName,
+          },
+        }
+      : fresh;
+
+    setLocalSheets((prev) => [...prev, created]);
     setActiveSheetId(created.id);
+    setSelectedControlSheetId(created.id);
     setActiveTab('pessoal');
+
+    if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+      void savePrivacySettingsToPlayerMetadata([created], obrCtx.playerId);
+      void upsertSharedSummaryInRoom(created);
+      if (obrCtx.party.some((p) => p.role === 'GM')) {
+        void sendOBRSyncMessage({
+          type: 'FULL_SHEET_SYNC',
+          sheet: created,
+          senderId: obrCtx.playerId,
+          sentAt: created.updatedAt,
+        });
+      }
+    }
+
     showToast('Nova ficha em branco criada.');
   };
 
   const handleDuplicateSheet = () => {
+    if (!activePolicy.isGM && !activePolicy.isOwner) {
+      showToast('Acesso negado: somente o proprietário ou o Mestre podem duplicar esta ficha.');
+      return;
+    }
+
     const baseName = activeSheet.identity.name.trim() || 'Ficha sem nome';
+    const now = new Date().toISOString();
     const copy: FichaPersonagem = recalculateCharacterSheet({
       ...structuredClone(activeSheet),
       id: `sheet-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
+      permissions: {
+        ...activeSheet.permissions,
+        ownerPlayerId: obrCtx.isInsideOBR ? obrCtx.playerId : activeSheet.permissions.ownerPlayerId,
+        ownerPlayerName: obrCtx.isInsideOBR
+          ? obrCtx.playerName
+          : activeSheet.permissions.ownerPlayerName,
+        allowOtherPlayersViewSheet: false,
+        allowOtherPlayersViewCombatCenter: false,
+      },
       identity: {
         ...activeSheet.identity,
         name: `${baseName} (Cópia)`,
       },
     });
-    setSheets((prev) => [...prev, copy]);
+
+    setLocalSheets((prev) => [...prev, copy]);
     setActiveSheetId(copy.id);
+
+    if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+      void savePrivacySettingsToPlayerMetadata([copy], obrCtx.playerId);
+      void upsertSharedSummaryInRoom(copy);
+      if (obrCtx.party.some((p) => p.role === 'GM')) {
+        void sendOBRSyncMessage({
+          type: 'FULL_SHEET_SYNC',
+          sheet: copy,
+          senderId: obrCtx.playerId,
+          sentAt: now,
+        });
+      }
+    }
+
     showToast('Ficha duplicada com sucesso.');
   };
 
   const handleDeleteSheet = (id: string) => {
-    if (sheets.length <= 1) {
-      const fresh = createVanillaBlankSheet();
-      setSheets([fresh]);
-      setActiveSheetId(fresh.id);
+    if (!localSheets.some((s) => s.id === id)) {
       setConfirmDeleteId(null);
+      return;
+    }
+
+    if (localSheets.length <= 1) {
+      const fresh = createVanillaBlankSheet();
+      const stamped: FichaPersonagem = obrCtx.isInsideOBR
+        ? {
+            ...fresh,
+            permissions: {
+              ...fresh.permissions,
+              ownerPlayerId: obrCtx.playerId,
+              ownerPlayerName: obrCtx.playerName,
+            },
+          }
+        : fresh;
+
+      setLocalSheets([stamped]);
+      setActiveSheetId(stamped.id);
+      setConfirmDeleteId(null);
+
+      if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+        void removeSharedSummaryFromRoom(id);
+        void sendOBRSyncMessage({
+          type: 'REMOVE_SHEET_SYNC',
+          sheetId: id,
+          senderId: obrCtx.playerId,
+        });
+        void upsertSharedSummaryInRoom(stamped);
+        void sendOBRSyncMessage({
+          type: 'FULL_SHEET_SYNC',
+          sheet: stamped,
+          senderId: obrCtx.playerId,
+          sentAt: stamped.updatedAt,
+        });
+      }
+
       showToast('Ficha reiniciada em branco.');
       return;
     }
-    const remaining = sheets.filter((s) => s.id !== id);
-    setSheets(remaining);
+
+    const remaining = localSheets.filter((s) => s.id !== id);
+    setLocalSheets(remaining);
     if (activeSheetId === id && remaining[0]) {
       setActiveSheetId(remaining[0].id);
     }
     setConfirmDeleteId(null);
+
+    if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+      void removeSharedSummaryFromRoom(id);
+      void sendOBRSyncMessage({
+        type: 'REMOVE_SHEET_SYNC',
+        sheetId: id,
+        senderId: obrCtx.playerId,
+      });
+    }
+
     showToast('Ficha excluída.');
   };
 
   const handleExportJson = () => {
+    if (!activePolicy.isGM && !activePolicy.isOwner) {
+      showToast('Acesso negado: somente o proprietário ou o Mestre podem exportar esta ficha.');
+      return;
+    }
+
     const blob = new Blob([JSON.stringify(activeSheet, null, 2)], {
       type: 'application/json',
     });
@@ -153,13 +1151,53 @@ export default function App() {
           showToast('Arquivo JSON inválido para F&M 2.5.');
           return;
         }
-        const imported = recalculateCharacterSheet({
+        const now = new Date().toISOString();
+        const imported = normalizeSyncedSheet({
           ...parsed,
           id: `sheet-${Date.now()}`,
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
+          permissions: {
+            ...parsed.permissions,
+            ownerPlayerId: obrCtx.isInsideOBR
+              ? obrCtx.playerId
+              : parsed.permissions?.ownerPlayerId ?? null,
+            ownerPlayerName: obrCtx.isInsideOBR
+              ? obrCtx.playerName
+              : parsed.permissions?.ownerPlayerName ?? '',
+            allowOtherPlayersViewSheet: Boolean(
+              parsed.permissions?.allowOtherPlayersViewSheet
+            ),
+            allowOtherPlayersViewCombatCenter: Boolean(
+              parsed.permissions?.allowOtherPlayersViewCombatCenter
+            ),
+          },
         });
-        setSheets((prev) => [...prev, imported]);
+        setLocalSheets((prev) => [...prev, imported]);
         setActiveSheetId(imported.id);
+
+        if (obrCtx.isInsideOBR && obrCtx.isReady && obrCtx.playerId) {
+          void savePrivacySettingsToPlayerMetadata([imported], obrCtx.playerId);
+          void upsertSharedSummaryInRoom(imported);
+          if (
+            obrCtx.party.some((p) => p.role === 'GM') ||
+            imported.permissions.allowOtherPlayersViewSheet
+          ) {
+            void sendOBRSyncMessage({
+              type: 'FULL_SHEET_SYNC',
+              sheet: imported,
+              senderId: obrCtx.playerId,
+              sentAt: now,
+            });
+          } else if (imported.permissions.allowOtherPlayersViewCombatCenter) {
+            void sendOBRSyncMessage({
+              type: 'FULL_SHEET_SYNC',
+              sheet: sanitizeSheetForCombatCenterOnly(imported),
+              senderId: obrCtx.playerId,
+              sentAt: now,
+            });
+          }
+        }
+
         showToast(
           `Ficha "${imported.identity.name.trim() || 'Sem nome'}" importada.`
         );
@@ -171,7 +1209,7 @@ export default function App() {
     event.target.value = '';
   };
 
-  const isReadOnly = viewerRole === 'PLAYER' && activeSheet.permissions.lockedByGM;
+  const isReadOnly = !activePolicy.canEditFullSheet;
   const activeGrade = resolveCalculableValue(activeSheet.identity.grade);
 
   return (
@@ -233,7 +1271,11 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1360px] space-y-6 px-4 py-6 sm:px-6">
+      <main
+        className={`mx-auto space-y-6 px-4 py-5 sm:px-6 ${
+          activeTab === 'inventario' ? 'max-w-full' : 'max-w-[1360px]'
+        }`}
+      >
         {/* Barra de Contexto da Mesa */}
         <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#212636] bg-[#11141e] px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -241,15 +1283,20 @@ export default function App() {
               Ficha Ativa
               <select
                 value={activeSheet.id}
-                onChange={(e) => setActiveSheetId(e.target.value)}
+                onChange={(e) => handleOpenFullSheet(e.target.value)}
                 className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-indigo-500 focus:outline-none"
               >
-                {sheets.map((s, idx) => (
-                  <option key={s.id} value={s.id}>
-                    {s.identity.name.trim() || `Personagem #${idx + 1} (Em branco)`} — Nvl{' '}
-                    {resolveCalculableValue(s.identity.level)}
-                  </option>
-                ))}
+                {accessibleFullSheets.map((s, idx) => {
+                  const isRemote = !localSheets.some((loc) => loc.id === s.id);
+                  const ownerLabel = s.permissions.ownerPlayerName || s.identity.player;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.identity.name.trim() || `Personagem #${idx + 1} (Em branco)`}
+                      {isRemote && ownerLabel ? ` [${ownerLabel}]` : ''} — Nvl{' '}
+                      {resolveCalculableValue(s.identity.level)}
+                    </option>
+                  );
+                })}
               </select>
             </label>
 
@@ -258,36 +1305,58 @@ export default function App() {
               <span aria-hidden="true">·</span>
               <span>{activeSheet.identity.origin || 'Sem origem'}</span>
               <span aria-hidden="true">·</span>
-              <span>{activeGrade || 'Sem grau'}</span>
+              <GradeBadge grade={activeGrade} size="xs" />
+              {!isLocalActiveSheet && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-indigo-300">
+                    Jogador:{' '}
+                    {activeSheet.permissions.ownerPlayerName ||
+                      activeSheet.identity.player ||
+                      'Remoto'}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewerRole('GM')}
-                className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
-                  viewerRole === 'GM'
-                    ? 'bg-[#22283a] text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+            {/* Papel: dentro do OBR vem estritamente de OBR.player.getRole(); fora do OBR mantém alternância local */}
+            {obrCtx.isInsideOBR ? (
+              <div
+                className="inline-flex items-center gap-1.5 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs font-medium text-slate-200 whitespace-nowrap shrink-0"
+                title="Papel detectado automaticamente pelo Owlbear Rodeo"
               >
-                <Shield className="h-3.5 w-3.5" />
-                Mestre
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewerRole('PLAYER')}
-                className={`rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
-                  viewerRole === 'PLAYER'
-                    ? 'bg-[#22283a] text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Jogador
-              </button>
-            </div>
+                <Shield className="h-3.5 w-3.5 text-indigo-300" />
+                {viewerRole === 'GM' ? 'Mestre (OBR)' : 'Jogador (OBR)'}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setLocalFallbackRole('GM')}
+                  className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    viewerRole === 'GM'
+                      ? 'bg-[#22283a] text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  Mestre
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocalFallbackRole('PLAYER')}
+                  className={`rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                    viewerRole === 'PLAYER'
+                      ? 'bg-[#22283a] text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Jogador
+                </button>
+              </div>
+            )}
 
             {viewerRole === 'GM' && (
               <button
@@ -321,23 +1390,27 @@ export default function App() {
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={handleDuplicateSheet}
-              className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
-            >
-              <Copy className="h-3.5 w-3.5" />
-              Duplicar
-            </button>
+            {(activePolicy.isGM || activePolicy.isOwner) && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDuplicateSheet}
+                  className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Duplicar
+                </button>
 
-            <button
-              type="button"
-              onClick={handleExportJson}
-              className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Exportar
-            </button>
+                <button
+                  type="button"
+                  onClick={handleExportJson}
+                  className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Exportar
+                </button>
+              </>
+            )}
 
             <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0">
               <Upload className="h-3.5 w-3.5" />
@@ -350,32 +1423,36 @@ export default function App() {
               />
             </label>
 
-            {confirmDeleteId === activeSheet.id ? (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleDeleteSheet(activeSheet.id)}
-                  className="rounded border border-red-500/60 bg-red-500/20 px-2.5 py-1.5 text-xs font-medium text-red-200 whitespace-nowrap shrink-0"
-                >
-                  Confirmar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteId(null)}
-                  className="rounded border border-[#242a3b] px-2 py-1.5 text-xs text-slate-400 whitespace-nowrap shrink-0"
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteId(activeSheet.id)}
-                className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300 whitespace-nowrap shrink-0"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {sheets.length <= 1 ? 'Zerar' : 'Excluir'}
-              </button>
+            {isLocalActiveSheet && (
+              <>
+                {confirmDeleteId === activeSheet.id ? (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSheet(activeSheet.id)}
+                      className="rounded border border-red-500/60 bg-red-500/20 px-2.5 py-1.5 text-xs font-medium text-red-200 whitespace-nowrap shrink-0"
+                    >
+                      Confirmar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="rounded border border-[#242a3b] px-2 py-1.5 text-xs text-slate-400 whitespace-nowrap shrink-0"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(activeSheet.id)}
+                    className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300 whitespace-nowrap shrink-0"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {localSheets.length <= 1 ? 'Zerar' : 'Excluir'}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -391,7 +1468,9 @@ export default function App() {
 
         {isReadOnly && (
           <div className="rounded border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200">
-            Modo somente leitura ativo: o mestre travou alterações nesta ficha para jogadores.
+            {!activePolicy.isOwner && !activePolicy.isGM
+              ? 'Modo somente leitura: você está visualizando a ficha compartilhada de outro jogador.'
+              : 'Modo somente leitura ativo: o mestre travou alterações nesta ficha para jogadores.'}
           </div>
         )}
 
@@ -400,6 +1479,14 @@ export default function App() {
             sheet={activeSheet}
             onUpdate={handleUpdateActiveSheet}
             readOnly={isReadOnly}
+            canManagePrivacy={activePolicy.canManagePrivacy}
+            canOpenCombatCenter={activePolicy.canViewCombatCenter}
+            onOpenCombatCenter={() => {
+              setSelectedControlSheetId(activeSheet.id);
+              setRequestedShieldSubView({ view: 'control', nonce: Date.now() });
+              setActiveTab('escudo');
+            }}
+            onUpdatePrivacy={(patch) => handleUpdatePrivacy(activeSheet.id, patch)}
           />
         )}
         {activeTab === 'amaldicoado' && (
@@ -437,7 +1524,25 @@ export default function App() {
             readOnly={isReadOnly}
           />
         )}
+        {activeTab === 'escudo' && (
+          <MasterShieldTab
+            viewerRole={viewerRole}
+            isInsideOBR={obrCtx.isInsideOBR}
+            currentPlayerId={obrCtx.playerId}
+            party={obrCtx.party}
+            localSheets={localSheets}
+            sessionSheets={sessionSheets}
+            sharedSummaries={sharedSummaries}
+            selectedControlSheetId={selectedControlSheetId}
+            onSelectControlSheet={setSelectedControlSheetId}
+            onUpdateSheetById={handleUpdateSheetById}
+            onOpenFullSheet={handleOpenFullSheet}
+            onRequestSyncFromRoom={handleRequestSyncFromRoom}
+            requestedSubView={requestedShieldSubView}
+          />
+        )}
       </main>
     </div>
   );
 }
+

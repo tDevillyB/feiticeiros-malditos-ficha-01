@@ -4,6 +4,7 @@
   :root {
     color-scheme: dark;
     --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-display: 'Philosopher', 'Plus Jakarta Sans', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
   }
 
@@ -22,6 +23,20 @@
   button {
     font-family: inherit;
   }
+}
+
+.font-display-rpg {
+  font-family: var(--font-display);
+  letter-spacing: 0.015em;
+}
+
+.grade-frame {
+  border-color: var(--grade-border, rgba(148, 163, 184, 0.35));
+}
+
+.group:hover .grade-frame,
+.grade-frame:hover {
+  border-color: var(--grade-border-hover, rgba(129, 140, 248, 0.72));
 }
 
 .font-mono-tabular {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Lock, RotateCcw, Unlock } from 'lucide-react';
 import type { CalculableNumber } from '../types/character';
 import {
@@ -29,6 +29,13 @@ export function CalculableValueControl({
   const effective = resolveCalculableValue(field);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(effective));
+  const skipBlurCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(String(effective));
+    }
+  }, [effective, editing]);
 
   const formatVal = (val: number) => {
     const prefix = signed && val > 0 ? '+' : '';
@@ -37,20 +44,27 @@ export function CalculableValueControl({
 
   const handleOpenManual = () => {
     if (readOnly) return;
+    skipBlurCommitRef.current = false;
     setDraft(String(effective));
     setEditing(true);
   };
 
   const handleCommitManual = () => {
-    const parsed = Number.parseFloat(draft.replace(',', '.'));
-    if (Number.isFinite(parsed)) {
-      onChange(enableManualOverride(field, parsed));
+    const normalized = draft.replace(',', '.').trim();
+    if (normalized !== '' && normalized !== '-') {
+      const parsed = Number.parseFloat(normalized);
+      if (Number.isFinite(parsed)) {
+        if (field.usarManual || parsed !== field.valorCalculado) {
+          onChange(enableManualOverride(field, parsed));
+        }
+      }
     }
     setEditing(false);
   };
 
   const handleResetAuto = () => {
     if (readOnly) return;
+    skipBlurCommitRef.current = true;
     onChange(disableManualOverride(field));
     setEditing(false);
   };
@@ -79,20 +93,41 @@ export function CalculableValueControl({
         {editing ? (
           <div className="flex items-center gap-1">
             <input
-              type="number"
-              step="any"
+              type="text"
+              inputMode="decimal"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (/^-?\d*(?:[.,]\d*)?$/.test(raw)) {
+                  setDraft(raw);
+                }
+              }}
+              onBlur={() => {
+                if (skipBlurCommitRef.current) {
+                  skipBlurCommitRef.current = false;
+                  return;
+                }
+                handleCommitManual();
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCommitManual();
-                if (e.key === 'Escape') setEditing(false);
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleCommitManual();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  skipBlurCommitRef.current = true;
+                  setDraft(String(effective));
+                  setEditing(false);
+                }
               }}
               autoFocus
+              onFocus={(e) => e.currentTarget.select()}
               aria-label={label ? `Sobrescrita manual de ${label}` : 'Valor manual'}
               className="w-20 rounded border border-amber-500/70 bg-[#0d1018] px-2 py-1 text-right font-mono-tabular text-sm text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
             />
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleCommitManual}
               className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/25 whitespace-nowrap shrink-0"
             >
@@ -107,25 +142,28 @@ export function CalculableValueControl({
                 : 'border-[#232838] bg-[#10131c] text-slate-100'
             }`}
           >
-            <span className={`font-mono-tabular ${valueSizeClass}`}>
-              {formatVal(effective)}
-            </span>
-
-            {!readOnly && (
+            {readOnly ? (
+              <span className={`font-mono-tabular ${valueSizeClass}`}>
+                {formatVal(effective)}
+              </span>
+            ) : (
               <button
                 type="button"
                 onClick={handleOpenManual}
                 title={
                   field.usarManual
                     ? `Valor manual ativo (automático: ${formatVal(field.valorCalculado)}). Clique para editar.`
-                    : 'Clique para sobrescrever manualmente'
+                    : 'Clique para editar valor manualmente'
                 }
-                className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="inline-flex items-center gap-1.5 rounded text-left hover:text-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
+                <span className={`font-mono-tabular ${valueSizeClass}`}>
+                  {formatVal(effective)}
+                </span>
                 {field.usarManual ? (
                   <Lock className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <Unlock className="h-3.5 w-3.5" />
+                  <Unlock className="h-3.5 w-3.5 text-slate-400" />
                 )}
               </button>
             )}
@@ -133,6 +171,7 @@ export function CalculableValueControl({
             {!readOnly && field.usarManual && (
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={handleResetAuto}
                 title="Retornar ao cálculo automático"
                 className="rounded p-1 text-amber-300 hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"

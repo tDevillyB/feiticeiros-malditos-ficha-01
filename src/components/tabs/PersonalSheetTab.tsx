@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Lock, Plus, Search, Settings, Swords, Trash2 } from 'lucide-react';
+import { SIMPLE_CONDITION_LIST } from '../../data/conditionsInfo';
 import type {
   AttributeKey,
   BleedingSeverity,
@@ -9,13 +10,47 @@ import type {
   ProficiencyRollEntry,
   SimpleConditionKey,
 } from '../../types/character';
-import { resolveCalculableValue } from '../../utils/calculations';
+import {
+  adjustPoolResource,
+  applyPoolMaxChange,
+  disableManualOverride,
+  resolveCalculableValue,
+  setPoolResourceCurrent,
+} from '../../utils/calculations';
+import { getGradeTheme } from '../../utils/gradeTheme';
 import { CalculableValueControl } from '../CalculableValueControl';
+import { GradeBadge } from '../GradeBadge';
+import { NumericInput } from '../NumericInput';
+
+const DAMAGE_TYPE_OPTIONS: DamageTypeKey[] = [
+  'Cortante',
+  'Perfurante',
+  'Impacto',
+  'Ácido',
+  'Chocante',
+  'Congelante',
+  'Energia Reversa',
+  'Energético',
+  'Sônico',
+  'Necrótico',
+  'Psíquico',
+  'Queimante',
+  'Radiante',
+  'Venenoso',
+  'Dano na alma',
+];
 
 interface PersonalSheetTabProps {
   sheet: FichaPersonagem;
   onUpdate: (updater: (prev: FichaPersonagem) => FichaPersonagem) => void;
   readOnly: boolean;
+  canManagePrivacy?: boolean;
+  canOpenCombatCenter?: boolean;
+  onOpenCombatCenter?: () => void;
+  onUpdatePrivacy?: (patch: {
+    allowOtherPlayersViewSheet?: boolean;
+    allowOtherPlayersViewCombatCenter?: boolean;
+  }) => void;
 }
 
 const ATTRIBUTE_KEYS: AttributeKey[] = ['FOR', 'DEX', 'CON', 'INT', 'SAB', 'PRE'];
@@ -24,9 +59,16 @@ export function PersonalSheetTab({
   sheet,
   onUpdate,
   readOnly,
+  canManagePrivacy = false,
+  canOpenCombatCenter = false,
+  onOpenCombatCenter,
+  onUpdatePrivacy,
 }: PersonalSheetTabProps) {
   const [skillSearch, setSkillSearch] = useState('');
   const [skillFilter, setSkillFilter] = useState<'all' | 'trained'>('all');
+  const [showPrivacyPanel, setShowPrivacyPanel] = useState(false);
+  const [newResistanceText, setNewResistanceText] = useState('');
+  const [newImmunityText, setNewImmunityText] = useState('');
 
   const hpCurrent = resolveCalculableValue(sheet.vitals.hp.current);
   const hpMax = resolveCalculableValue(sheet.vitals.hp.max);
@@ -72,8 +114,165 @@ export function PersonalSheetTab({
     }));
   };
 
+  const allowSheet = Boolean(sheet.permissions.allowOtherPlayersViewSheet);
+  const allowCombatCenter = Boolean(sheet.permissions.allowOtherPlayersViewCombatCenter);
+  const activeGrade = resolveCalculableValue(sheet.identity.grade);
+  const gradeTheme = getGradeTheme(activeGrade);
+
+  const handlePrivacyToggle = (patch: {
+    allowOtherPlayersViewSheet?: boolean;
+    allowOtherPlayersViewCombatCenter?: boolean;
+  }) => {
+    if (!canManagePrivacy) return;
+    if (onUpdatePrivacy) {
+      onUpdatePrivacy(patch);
+      return;
+    }
+    onUpdate((prev) => ({
+      ...prev,
+      permissions: {
+        ...prev.permissions,
+        ...patch,
+      },
+    }));
+  };
+
   return (
     <div className="space-y-6">
+      {/* Barra Superior da Ficha Pessoal + Privacidade */}
+      <div className="space-y-3">
+        <div className="relative overflow-hidden flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#212636] bg-[#11141e] px-4 py-2.5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[1px]"
+            style={{
+              background: `linear-gradient(90deg, ${gradeTheme.lineColor}, transparent 55%)`,
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+            <span
+              className="font-display-rpg text-sm font-bold"
+              style={{ color: gradeTheme.nameColor }}
+            >
+              {sheet.identity.name.trim() || 'Personagem sem nome'}
+            </span>
+            <GradeBadge grade={activeGrade} size="xs" showFallback={false} />
+            <span aria-hidden="true" className="text-slate-600">·</span>
+            <span className="text-slate-400">
+              {allowSheet ? 'Ficha visível a jogadores' : 'Ficha privada'}
+            </span>
+            <span aria-hidden="true" className="text-slate-600">·</span>
+            <span className="text-slate-400">
+              {allowCombatCenter
+                ? 'Central de Combate visível a jogadores'
+                : 'Central de Combate privada'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {canOpenCombatCenter && onOpenCombatCenter && (
+              <button
+                type="button"
+                onClick={onOpenCombatCenter}
+                className="inline-flex items-center gap-1.5 rounded border border-indigo-500/40 bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-100 hover:bg-indigo-600/35 whitespace-nowrap shrink-0"
+              >
+                <Swords className="h-3.5 w-3.5" />
+                Central de Combate
+              </button>
+            )}
+
+            {canManagePrivacy && (
+              <button
+                type="button"
+                aria-expanded={showPrivacyPanel}
+                aria-label="Configurações de privacidade e compartilhamento"
+                onClick={() => setShowPrivacyPanel((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                  showPrivacyPanel
+                    ? 'border-indigo-500/60 bg-indigo-600/25 text-indigo-100'
+                    : 'border-[#242a3b] bg-[#0b0d14] text-slate-300 hover:bg-[#171b28]'
+                }`}
+              >
+                <Settings className="h-3.5 w-3.5" />
+                Privacidade
+              </button>
+            )}
+          </div>
+        </div>
+
+        {canManagePrivacy && showPrivacyPanel && (
+          <section
+            aria-label="Configurações de privacidade e compartilhamento"
+            className="rounded-lg border border-indigo-500/35 bg-[#11141e] p-4"
+          >
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100">
+                  Privacidade e Compartilhamento do Personagem
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Controle independente de visualização para outros jogadores. O Mestre sempre mantém acesso completo.
+                </p>
+              </div>
+              {sheet.permissions.lockedByGM && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-amber-300">
+                  <Lock className="h-3 w-3" />
+                  Edição da ficha travada pelo Mestre
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded border border-[#1e2332] bg-[#0b0d14] p-3 transition-colors hover:border-[#2c344d]">
+                <input
+                  type="checkbox"
+                  checked={allowSheet}
+                  onChange={(e) =>
+                    handlePrivacyToggle({
+                      allowOtherPlayersViewSheet: e.target.checked,
+                    })
+                  }
+                  className="mt-0.5 h-4 w-4 accent-indigo-500"
+                />
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-slate-100">
+                    Permitir que outros jogadores visualizem minha ficha
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {allowSheet
+                      ? 'Ativada: outros jogadores podem abrir sua ficha completa em modo somente leitura.'
+                      : 'Desativada: outros jogadores não podem acessar sua ficha.'}
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded border border-[#1e2332] bg-[#0b0d14] p-3 transition-colors hover:border-[#2c344d]">
+                <input
+                  type="checkbox"
+                  checked={allowCombatCenter}
+                  onChange={(e) =>
+                    handlePrivacyToggle({
+                      allowOtherPlayersViewCombatCenter: e.target.checked,
+                    })
+                  }
+                  className="mt-0.5 h-4 w-4 accent-indigo-500"
+                />
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-slate-100">
+                    Permitir que outros jogadores visualizem minha Central de Combate
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {allowCombatCenter
+                      ? 'Ativada: outros jogadores podem visualizar sua Central de Combate sem editar.'
+                      : 'Desativada: outros jogadores não podem acessar sua Central de Combate.'}
+                  </p>
+                </div>
+              </label>
+            </div>
+          </section>
+        )}
+      </div>
+
       {/* Resumo Rápido de Combate (KPI Strip) */}
       <section className="grid grid-cols-2 divide-y divide-[#1d2230] rounded-lg border border-[#212636] bg-[#11141e] sm:grid-cols-3 lg:grid-cols-6 lg:divide-x lg:divide-y-0">
         <div className="p-4">
@@ -128,10 +327,28 @@ export function PersonalSheetTab({
               label="Nível Total"
               field={sheet.identity.level}
               onChange={(level) =>
-                onUpdate((prev) => ({
-                  ...prev,
-                  identity: { ...prev.identity, level },
-                }))
+                onUpdate((prev) => {
+                  if (
+                    level.usarManual &&
+                    level.sobrescritaManual !== undefined &&
+                    prev.identity.multiclassLevel === 0 &&
+                    level.sobrescritaManual >= 1 &&
+                    level.sobrescritaManual <= 20
+                  ) {
+                    return {
+                      ...prev,
+                      identity: {
+                        ...prev.identity,
+                        specializationLevel: Math.round(level.sobrescritaManual),
+                        level: disableManualOverride(level, true),
+                      },
+                    };
+                  }
+                  return {
+                    ...prev,
+                    identity: { ...prev.identity, level },
+                  };
+                })
               }
               readOnly={readOnly}
               size="sm"
@@ -255,18 +472,19 @@ export function PersonalSheetTab({
             </label>
             <label className="flex w-20 flex-col gap-1 text-xs text-slate-400">
               Nvl
-              <input
-                type="number"
+              <NumericInput
                 min={0}
                 max={20}
+                integer
                 disabled={readOnly}
                 value={sheet.identity.specializationLevel}
-                onChange={(e) =>
+                onChange={(nextLvl) =>
                   onUpdate((prev) => ({
                     ...prev,
                     identity: {
                       ...prev.identity,
-                      specializationLevel: Number(e.target.value) || 0,
+                      specializationLevel: nextLvl,
+                      level: disableManualOverride(prev.identity.level, true),
                     },
                   }))
                 }
@@ -293,18 +511,19 @@ export function PersonalSheetTab({
             </label>
             <label className="flex w-20 flex-col gap-1 text-xs text-slate-400">
               Nvl
-              <input
-                type="number"
+              <NumericInput
                 min={0}
                 max={20}
+                integer
                 disabled={readOnly}
                 value={sheet.identity.multiclassLevel}
-                onChange={(e) =>
+                onChange={(nextLvl) =>
                   onUpdate((prev) => ({
                     ...prev,
                     identity: {
                       ...prev.identity,
-                      multiclassLevel: Number(e.target.value) || 0,
+                      multiclassLevel: nextLvl,
+                      level: disableManualOverride(prev.identity.level, true),
                     },
                   }))
                 }
@@ -314,10 +533,25 @@ export function PersonalSheetTab({
           </div>
 
           <label className="flex flex-col gap-1 text-xs text-slate-400">
-            Grau
+            <span className="flex items-center justify-between gap-2">
+              <span>Grau</span>
+              {gradeTheme.hasGrade && (
+                <span
+                  className="inline-flex items-center gap-1 font-display-rpg text-[11px] font-bold"
+                  style={{ color: gradeTheme.accentText }}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-1.5 w-1.5 rotate-45"
+                    style={{ backgroundColor: gradeTheme.accentText }}
+                  />
+                  {gradeTheme.label}
+                </span>
+              )}
+            </span>
             <select
               disabled={readOnly}
-              value={resolveCalculableValue(sheet.identity.grade)}
+              value={activeGrade}
               onChange={(e) => {
                 const nextGrade = e.target.value;
                 onUpdate((prev) => ({
@@ -337,6 +571,11 @@ export function PersonalSheetTab({
                   },
                 }));
               }}
+              style={
+                gradeTheme.hasGrade
+                  ? { borderColor: gradeTheme.borderColor }
+                  : undefined
+              }
               className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
             >
               <option value="">Selecionar...</option>
@@ -368,6 +607,32 @@ export function PersonalSheetTab({
               className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
             />
           </label>
+
+          <label className="flex flex-col gap-1 text-xs text-slate-400 sm:col-span-2 lg:col-span-4">
+            Avatar / Imagem (URL opcional para o Escudo do Mestre)
+            <div className="flex items-center gap-2">
+              {sheet.identity.avatarUrl && (
+                <img
+                  src={sheet.identity.avatarUrl}
+                  alt={sheet.identity.name || 'Avatar'}
+                  className="h-9 w-9 shrink-0 rounded border border-[#242a3b] object-cover"
+                />
+              )}
+              <input
+                type="url"
+                disabled={readOnly}
+                placeholder="https://... (URL de imagem do personagem)"
+                value={sheet.identity.avatarUrl ?? ''}
+                onChange={(e) =>
+                  onUpdate((prev) => ({
+                    ...prev,
+                    identity: { ...prev.identity, avatarUrl: e.target.value },
+                  }))
+                }
+                className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
+              />
+            </div>
+          </label>
         </div>
       </section>
 
@@ -395,13 +660,12 @@ export function PersonalSheetTab({
                       <span className="font-mono-tabular text-slate-400">
                         + Bônus
                       </span>
-                      <input
-                        type="number"
+                      <NumericInput
+                        integer
                         disabled={readOnly}
                         aria-label={`Bônus externo de ${attr.label}`}
                         value={attr.bonusValue}
-                        onChange={(e) => {
-                          const nextBonus = Number(e.target.value) || 0;
+                        onChange={(nextBonus) => {
                           onUpdate((prev) => ({
                             ...prev,
                             attributes: {
@@ -415,13 +679,12 @@ export function PersonalSheetTab({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
+                    <NumericInput
+                      integer
                       disabled={readOnly}
                       aria-label={`Valor base de ${attr.label}`}
                       value={attr.baseValue}
-                      onChange={(e) => {
-                        const nextBase = Number(e.target.value) || 0;
+                      onChange={(nextBase) => {
                         onUpdate((prev) => ({
                           ...prev,
                           attributes: {
@@ -471,39 +734,53 @@ export function PersonalSheetTab({
                     {hpCurrent} / {hpMax} ({hpPct}%)
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <CalculableValueControl
-                    label="Atual"
-                    field={sheet.vitals.hp.current}
-                    readOnly={readOnly}
-                    size="sm"
-                    onChange={(current) =>
-                      onUpdate((prev) => ({
-                        ...prev,
-                        vitals: {
-                          ...prev.vitals,
-                          hp: { ...prev.vitals.hp, current },
-                        },
-                      }))
-                    }
-                  />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-medium text-slate-400">
+                    Atual
+                    <NumericInput
+                      min={0}
+                      integer
+                      disabled={readOnly}
+                      aria-label="PV Atual"
+                      value={hpCurrent}
+                      onChange={(nextHp) =>
+                        onUpdate((prev) => setPoolResourceCurrent(prev, 'hp', nextHp))
+                      }
+                      className="w-20 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 text-right font-mono-tabular text-sm font-semibold text-emerald-300 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
+                    />
+                  </label>
                   <CalculableValueControl
                     label="Máximo"
                     field={sheet.vitals.hp.max}
                     readOnly={readOnly}
                     size="sm"
                     onChange={(max) =>
-                      onUpdate((prev) => ({
-                        ...prev,
-                        vitals: {
-                          ...prev.vitals,
-                          hp: { ...prev.vitals.hp, max },
-                        },
-                      }))
+                      onUpdate((prev) => applyPoolMaxChange(prev, 'hp', max))
                     }
                   />
                 </div>
               </div>
+              {!readOnly && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-500">Ajuste rápido PV:</span>
+                  <div className="flex items-center gap-1">
+                    {([-5, -1, 1, 5] as const).map((delta) => (
+                      <button
+                        key={delta}
+                        type="button"
+                        onClick={() => onUpdate((prev) => adjustPoolResource(prev, 'hp', delta))}
+                        className={`rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 font-mono-tabular text-[11px] font-medium ${
+                          delta < 0
+                            ? 'text-red-300 hover:bg-red-500/15'
+                            : 'text-emerald-300 hover:bg-emerald-500/15'
+                        }`}
+                      >
+                        {delta > 0 ? `+${delta}` : delta}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="h-2 w-full overflow-hidden rounded bg-[#0b0d14]">
                 <div
                   className="h-full bg-emerald-600 transition-all"
@@ -513,29 +790,40 @@ export function PersonalSheetTab({
               <div className="grid grid-cols-4 gap-2 pt-1">
                 {(
                   [
-                    ['lost', 'Perdido'],
-                    ['healed', 'Curado'],
-                    ['temp', 'Temp.'],
-                    ['other', 'Outros'],
+                    ['lost', 'Perdido', 0],
+                    ['healed', 'Curado', 0],
+                    ['temp', 'Temp.', 0],
+                    ['other', 'Outros', undefined],
                   ] as const
-                ).map(([fieldKey, lbl]) => (
+                ).map(([fieldKey, lbl, minVal]) => (
                   <label key={fieldKey} className="flex flex-col gap-1 text-[11px] text-slate-400">
                     {lbl}
-                    <input
-                      type="number"
+                    <NumericInput
+                      min={minVal}
+                      integer
                       disabled={readOnly}
                       value={sheet.vitals.hp[fieldKey]}
-                      onChange={(e) =>
-                        onUpdate((prev) => ({
-                          ...prev,
-                          vitals: {
-                            ...prev.vitals,
-                            hp: {
-                              ...prev.vitals.hp,
-                              [fieldKey]: Number(e.target.value) || 0,
+                      onChange={(nextVal) =>
+                        onUpdate((prev) => {
+                          const oldMax = resolveCalculableValue(prev.vitals.hp.max);
+                          const clearInterimHealed =
+                            fieldKey === 'other' &&
+                            oldMax === 0 &&
+                            nextVal > 0 &&
+                            prev.vitals.hp.lost === 0 &&
+                            prev.vitals.hp.healed > 0;
+                          return {
+                            ...prev,
+                            vitals: {
+                              ...prev.vitals,
+                              hp: {
+                                ...prev.vitals.hp,
+                                [fieldKey]: nextVal,
+                                ...(clearInterimHealed ? { healed: 0 } : {}),
+                              },
                             },
-                          },
-                        }))
+                          };
+                        })
                       }
                       className="rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-right font-mono-tabular text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
                     />
@@ -593,39 +881,53 @@ export function PersonalSheetTab({
                     {peCurrent} / {peMax} ({pePct}%)
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <CalculableValueControl
-                    label="Atual"
-                    field={sheet.vitals.pe.current}
-                    readOnly={readOnly}
-                    size="sm"
-                    onChange={(current) =>
-                      onUpdate((prev) => ({
-                        ...prev,
-                        vitals: {
-                          ...prev.vitals,
-                          pe: { ...prev.vitals.pe, current },
-                        },
-                      }))
-                    }
-                  />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-medium text-slate-400">
+                    Atual
+                    <NumericInput
+                      min={0}
+                      integer
+                      disabled={readOnly}
+                      aria-label="PE Atual"
+                      value={peCurrent}
+                      onChange={(nextPe) =>
+                        onUpdate((prev) => setPoolResourceCurrent(prev, 'pe', nextPe))
+                      }
+                      className="w-20 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 text-right font-mono-tabular text-sm font-semibold text-indigo-300 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
+                    />
+                  </label>
                   <CalculableValueControl
                     label="Máximo"
                     field={sheet.vitals.pe.max}
                     readOnly={readOnly}
                     size="sm"
                     onChange={(max) =>
-                      onUpdate((prev) => ({
-                        ...prev,
-                        vitals: {
-                          ...prev.vitals,
-                          pe: { ...prev.vitals.pe, max },
-                        },
-                      }))
+                      onUpdate((prev) => applyPoolMaxChange(prev, 'pe', max))
                     }
                   />
                 </div>
               </div>
+              {!readOnly && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-500">Ajuste rápido PE:</span>
+                  <div className="flex items-center gap-1">
+                    {([-5, -1, 1, 5] as const).map((delta) => (
+                      <button
+                        key={delta}
+                        type="button"
+                        onClick={() => onUpdate((prev) => adjustPoolResource(prev, 'pe', delta))}
+                        className={`rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 font-mono-tabular text-[11px] font-medium ${
+                          delta < 0
+                            ? 'text-red-300 hover:bg-red-500/15'
+                            : 'text-indigo-200 hover:bg-indigo-500/15'
+                        }`}
+                      >
+                        {delta > 0 ? `+${delta}` : delta}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="h-2 w-full overflow-hidden rounded bg-[#0b0d14]">
                 <div
                   className="h-full bg-indigo-500 transition-all"
@@ -635,29 +937,40 @@ export function PersonalSheetTab({
               <div className="grid grid-cols-4 gap-2 pt-1">
                 {(
                   [
-                    ['lost', 'Perdido'],
-                    ['healed', 'Curado'],
-                    ['temp', 'Temp.'],
-                    ['other', 'Outros'],
+                    ['lost', 'Perdido', 0],
+                    ['healed', 'Curado', 0],
+                    ['temp', 'Temp.', 0],
+                    ['other', 'Outros', undefined],
                   ] as const
-                ).map(([fieldKey, lbl]) => (
+                ).map(([fieldKey, lbl, minVal]) => (
                   <label key={fieldKey} className="flex flex-col gap-1 text-[11px] text-slate-400">
                     {lbl}
-                    <input
-                      type="number"
+                    <NumericInput
+                      min={minVal}
+                      integer
                       disabled={readOnly}
                       value={sheet.vitals.pe[fieldKey]}
-                      onChange={(e) =>
-                        onUpdate((prev) => ({
-                          ...prev,
-                          vitals: {
-                            ...prev.vitals,
-                            pe: {
-                              ...prev.vitals.pe,
-                              [fieldKey]: Number(e.target.value) || 0,
+                      onChange={(nextVal) =>
+                        onUpdate((prev) => {
+                          const oldMax = resolveCalculableValue(prev.vitals.pe.max);
+                          const clearInterimHealed =
+                            fieldKey === 'other' &&
+                            oldMax === 0 &&
+                            nextVal > 0 &&
+                            prev.vitals.pe.lost === 0 &&
+                            prev.vitals.pe.healed > 0;
+                          return {
+                            ...prev,
+                            vitals: {
+                              ...prev.vitals,
+                              pe: {
+                                ...prev.vitals.pe,
+                                [fieldKey]: nextVal,
+                                ...(clearInterimHealed ? { healed: 0 } : {}),
+                              },
                             },
-                          },
-                        }))
+                          };
+                        })
                       }
                       className="rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-right font-mono-tabular text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
                     />
@@ -766,16 +1079,17 @@ export function PersonalSheetTab({
                   </div>
                   <label className="flex items-center justify-between text-[11px] text-slate-400">
                     Perdido
-                    <input
-                      type="number"
+                    <NumericInput
+                      min={0}
+                      integer
                       disabled={readOnly}
                       value={sheet.vitals.er.lost}
-                      onChange={(e) =>
+                      onChange={(nextVal) =>
                         onUpdate((prev) => ({
                           ...prev,
                           vitals: {
                             ...prev.vitals,
-                            er: { ...prev.vitals.er, lost: Number(e.target.value) || 0 },
+                            er: { ...prev.vitals.er, lost: nextVal },
                           },
                         }))
                       }
@@ -793,13 +1107,12 @@ export function PersonalSheetTab({
                 <div className="mt-2 space-y-1.5">
                   <label className="flex items-center justify-between text-[11px] text-slate-400">
                     Máximo
-                    <input
-                      type="number"
+                    <NumericInput
                       min={0}
+                      integer
                       disabled={readOnly}
                       value={resolveCalculableValue(sheet.vitals.sanity.max)}
-                      onChange={(e) => {
-                        const nextMax = Math.max(0, Number(e.target.value) || 0);
+                      onChange={(nextMax) => {
                         onUpdate((prev) => ({
                           ...prev,
                           vitals: {
@@ -818,18 +1131,19 @@ export function PersonalSheetTab({
                   </label>
                   <label className="flex items-center justify-between text-[11px] text-slate-400">
                     Perdido
-                    <input
-                      type="number"
+                    <NumericInput
+                      min={0}
+                      integer
                       disabled={readOnly}
                       value={sheet.vitals.sanity.lost}
-                      onChange={(e) =>
+                      onChange={(nextVal) =>
                         onUpdate((prev) => ({
                           ...prev,
                           vitals: {
                             ...prev.vitals,
                             sanity: {
                               ...prev.vitals.sanity,
-                              lost: Number(e.target.value) || 0,
+                              lost: nextVal,
                             },
                           },
                         }))
@@ -839,18 +1153,19 @@ export function PersonalSheetTab({
                   </label>
                   <label className="flex items-center justify-between text-[11px] text-slate-400">
                     Recup.
-                    <input
-                      type="number"
+                    <NumericInput
+                      min={0}
+                      integer
                       disabled={readOnly}
                       value={sheet.vitals.sanity.recovered}
-                      onChange={(e) =>
+                      onChange={(nextVal) =>
                         onUpdate((prev) => ({
                           ...prev,
                           vitals: {
                             ...prev.vitals,
                             sanity: {
                               ...prev.vitals.sanity,
-                              recovered: Number(e.target.value) || 0,
+                              recovered: nextVal,
                             },
                           },
                         }))
@@ -892,19 +1207,19 @@ export function PersonalSheetTab({
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
                     <label className="flex items-center gap-1">
                       RD
-                      <input
-                        type="number"
+                      <NumericInput
                         min={0}
+                        integer
                         disabled={readOnly}
                         value={sheet.vitals.integrity.rd}
-                        onChange={(e) =>
+                        onChange={(nextVal) =>
                           onUpdate((prev) => ({
                             ...prev,
                             vitals: {
                               ...prev.vitals,
                               integrity: {
                                 ...prev.vitals.integrity,
-                                rd: Number(e.target.value) || 0,
+                                rd: nextVal,
                               },
                             },
                           }))
@@ -914,19 +1229,19 @@ export function PersonalSheetTab({
                     </label>
                     <label className="flex items-center gap-1">
                       Perd.
-                      <input
-                        type="number"
+                      <NumericInput
                         min={0}
+                        integer
                         disabled={readOnly}
                         value={sheet.vitals.integrity.lost}
-                        onChange={(e) =>
+                        onChange={(nextVal) =>
                           onUpdate((prev) => ({
                             ...prev,
                             vitals: {
                               ...prev.vitals,
                               integrity: {
                                 ...prev.vitals.integrity,
-                                lost: Number(e.target.value) || 0,
+                                lost: nextVal,
                               },
                             },
                           }))
@@ -967,12 +1282,11 @@ export function PersonalSheetTab({
               >
                 <span className="text-slate-300">{comp.label}</span>
                 <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
+                  <NumericInput
+                    integer
                     disabled={readOnly}
                     value={comp.bonus}
-                    onChange={(e) => {
-                      const val = Number(e.target.value) || 0;
+                    onChange={(val) => {
                       onUpdate((prev) => ({
                         ...prev,
                         defense: {
@@ -1049,21 +1363,67 @@ export function PersonalSheetTab({
                 }))
               }
             />
-            <CalculableValueControl
-              label="Desloc. (m)"
-              field={sheet.derived.movement.total}
-              readOnly={readOnly}
-              size="sm"
-              onChange={(total) =>
-                onUpdate((prev) => ({
-                  ...prev,
-                  derived: {
-                    ...prev.derived,
-                    movement: { ...prev.derived.movement, total },
-                  },
-                }))
-              }
-            />
+            <div className="flex flex-col gap-1.5">
+              <CalculableValueControl
+                label="Desloc. (m)"
+                field={sheet.derived.movement.total}
+                readOnly={readOnly}
+                size="sm"
+                onChange={(total) =>
+                  onUpdate((prev) => ({
+                    ...prev,
+                    derived: {
+                      ...prev.derived,
+                      movement: { ...prev.derived.movement, total },
+                    },
+                  }))
+                }
+              />
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <label className="flex items-center gap-1" title="Bônus de deslocamento (Base 9m)">
+                  <span>+</span>
+                  <NumericInput
+                    disabled={readOnly}
+                    aria-label="Adicional de deslocamento"
+                    value={sheet.derived.movement.add}
+                    onChange={(nextVal) =>
+                      onUpdate((prev) => ({
+                        ...prev,
+                        derived: {
+                          ...prev.derived,
+                          movement: {
+                            ...prev.derived.movement,
+                            add: nextVal,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-11 rounded border border-[#242a3b] bg-[#0b0d14] px-1 py-0.5 text-right font-mono-tabular text-[11px] text-slate-200"
+                  />
+                </label>
+                <label className="flex items-center gap-1" title="Redução de deslocamento">
+                  <span>-</span>
+                  <NumericInput
+                    disabled={readOnly}
+                    aria-label="Redução de deslocamento"
+                    value={sheet.derived.movement.removed}
+                    onChange={(nextVal) =>
+                      onUpdate((prev) => ({
+                        ...prev,
+                        derived: {
+                          ...prev.derived,
+                          movement: {
+                            ...prev.derived.movement,
+                            removed: nextVal,
+                          },
+                        },
+                      }))
+                    }
+                    className="w-11 rounded border border-[#242a3b] bg-[#0b0d14] px-1 py-0.5 text-right font-mono-tabular text-[11px] text-slate-200"
+                  />
+                </label>
+              </div>
+            </div>
             <CalculableValueControl
               label="CD Espec."
               field={sheet.derived.cdSpecialization.total}
@@ -1159,49 +1519,61 @@ export function PersonalSheetTab({
                     <span className="font-mono-tabular font-semibold">{pool.die}</span>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[11px] text-slate-500">Dados</span>
-                      <input
-                        type="number"
+                      <NumericInput
                         min={0}
+                        integer
                         disabled={readOnly}
                         aria-label={`Quantidade de dados ${pool.die}`}
                         value={resolveCalculableValue(pool.owned)}
-                        onChange={(e) => {
-                          const nextOwned = Math.max(0, Number(e.target.value) || 0);
-                          onUpdate((prev) => ({
-                            ...prev,
-                            vitals: {
-                              ...prev.vitals,
-                              hitDice: prev.vitals.hitDice.map((h) =>
-                                h.id === pool.id
-                                  ? {
-                                      ...h,
-                                      owned: h.owned.usarManual
-                                        ? { ...h.owned, sobrescritaManual: nextOwned }
-                                        : { ...h.owned, valorCalculado: nextOwned },
-                                    }
-                                  : h
-                              ),
-                            },
-                          }));
+                        onChange={(nextOwned) => {
+                          onUpdate((prev) => {
+                            const oldMax = resolveCalculableValue(prev.vitals.hp.max);
+                            const hadAnyDice = prev.vitals.hitDice.some(
+                              (h) => resolveCalculableValue(h.owned) > 0
+                            );
+                            const clearInterimHealed =
+                              !hadAnyDice &&
+                              nextOwned > 0 &&
+                              oldMax === 0 &&
+                              prev.vitals.hp.lost === 0 &&
+                              prev.vitals.hp.healed > 0;
+                            return {
+                              ...prev,
+                              vitals: {
+                                ...prev.vitals,
+                                hp: clearInterimHealed
+                                  ? { ...prev.vitals.hp, healed: 0 }
+                                  : prev.vitals.hp,
+                                hitDice: prev.vitals.hitDice.map((h) =>
+                                  h.id === pool.id
+                                    ? {
+                                        ...h,
+                                        owned: h.owned.usarManual
+                                          ? { ...h.owned, sobrescritaManual: nextOwned }
+                                          : { ...h.owned, valorCalculado: nextOwned },
+                                      }
+                                    : h
+                                ),
+                              },
+                            };
+                          });
                         }}
                         className="w-11 rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 text-right font-mono-tabular text-xs text-slate-100"
                       />
                       <span className="text-[11px] text-slate-500">Gastos</span>
-                      <input
-                        type="number"
+                      <NumericInput
                         min={0}
+                        integer
                         disabled={readOnly}
                         aria-label={`Dados ${pool.die} gastos`}
                         value={pool.used}
-                        onChange={(e) =>
+                        onChange={(nextUsed) =>
                           onUpdate((prev) => ({
                             ...prev,
                             vitals: {
                               ...prev.vitals,
                               hitDice: prev.vitals.hitDice.map((h) =>
-                                h.id === pool.id
-                                  ? { ...h, used: Math.max(0, Number(e.target.value) || 0) }
-                                  : h
+                                h.id === pool.id ? { ...h, used: nextUsed } : h
                               ),
                             },
                           }))
@@ -1445,6 +1817,155 @@ export function PersonalSheetTab({
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* Habilidades de Especialização (separada de Habilidades e Talentos, Técnica e Aptidões) */}
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+            <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+              <div>
+                <h2 className="text-base font-semibold text-slate-100">
+                  Habilidades de Especialização
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Habilidades fixas e escolhidas obtidas pela especialização do personagem.
+                </p>
+              </div>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdate((prev) => ({
+                      ...prev,
+                      specializationAbilities: [
+                        ...prev.specializationAbilities,
+                        {
+                          id: `spec-ab-${Date.now()}`,
+                          slotLabel: `Nvl ${prev.specializationAbilities.length + 1}`,
+                          category: 'chosen',
+                          name: 'Nova Habilidade',
+                          description: '',
+                        },
+                      ],
+                    }))
+                  }
+                  className="inline-flex items-center gap-1 rounded border border-indigo-500/40 bg-indigo-600/15 px-2.5 py-1 text-xs font-medium text-indigo-100 hover:bg-indigo-600/25 whitespace-nowrap shrink-0"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar
+                </button>
+              )}
+            </div>
+            {sheet.specializationAbilities.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Nenhuma habilidade de especialização registrada.
+              </p>
+            ) : (
+              <div className="space-y-2.5 text-xs">
+                {sheet.specializationAbilities.map((slot) => (
+                  <div
+                    key={slot.id}
+                    className="space-y-2 rounded border border-[#1e2332] bg-[#0d1018] p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        disabled={readOnly}
+                        placeholder="Nível / Marco"
+                        value={slot.slotLabel}
+                        onChange={(e) =>
+                          onUpdate((prev) => ({
+                            ...prev,
+                            specializationAbilities: prev.specializationAbilities.map(
+                              (item) =>
+                                item.id === slot.id
+                                  ? { ...item, slotLabel: e.target.value }
+                                  : item
+                            ),
+                          }))
+                        }
+                        className="w-24 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] font-medium text-indigo-200"
+                      />
+                      <select
+                        disabled={readOnly}
+                        value={slot.category}
+                        onChange={(e) =>
+                          onUpdate((prev) => ({
+                            ...prev,
+                            specializationAbilities: prev.specializationAbilities.map(
+                              (item) =>
+                                item.id === slot.id
+                                  ? {
+                                      ...item,
+                                      category: e.target.value as 'fixed' | 'chosen',
+                                    }
+                                  : item
+                            ),
+                          }))
+                        }
+                        className="rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-300"
+                      >
+                        <option value="fixed">Fixa</option>
+                        <option value="chosen">Escolhida</option>
+                      </select>
+                      <input
+                        type="text"
+                        disabled={readOnly}
+                        placeholder="Nome da habilidade de especialização"
+                        value={slot.name}
+                        onChange={(e) =>
+                          onUpdate((prev) => ({
+                            ...prev,
+                            specializationAbilities: prev.specializationAbilities.map(
+                              (item) =>
+                                item.id === slot.id
+                                  ? { ...item, name: e.target.value }
+                                  : item
+                            ),
+                          }))
+                        }
+                        className="min-w-36 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 font-semibold text-slate-100"
+                      />
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdate((prev) => ({
+                              ...prev,
+                              specializationAbilities:
+                                prev.specializationAbilities.filter(
+                                  (item) => item.id !== slot.id
+                                ),
+                            }))
+                          }
+                          title="Remover habilidade de especialização"
+                          className="p-1 text-slate-500 hover:text-red-400"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      rows={2}
+                      disabled={readOnly}
+                      placeholder="Efeito, pré-requisitos e regras da habilidade de especialização..."
+                      value={slot.description}
+                      onChange={(e) =>
+                        onUpdate((prev) => ({
+                          ...prev,
+                          specializationAbilities: prev.specializationAbilities.map(
+                            (item) =>
+                              item.id === slot.id
+                                ? { ...item, description: e.target.value }
+                                : item
+                          ),
+                        }))
+                      }
+                      className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Habilidades e Talentos (Atual / Máx. / Custo - Modelo v2.5) */}
@@ -1810,13 +2331,136 @@ export function PersonalSheetTab({
         </div>
       </div>
 
-      {/* Reduções de Dano, Anotações e Condições */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-5">
+      {/* Resistências, Reduções de Dano (RD) e Imunidades — Três Seções Separadas */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* 1. RESISTÊNCIAS */}
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
           <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
-            <h2 className="text-base font-semibold text-slate-100">
-              Reduções de Dano (RDs)
-            </h2>
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">Resistências</h2>
+              <p className="text-[11px] text-slate-400">
+                Reduz à metade o dano recebido dos tipos selecionados.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 text-xs">
+            {DAMAGE_TYPE_OPTIONS.map((type) => {
+              const active = sheet.damageMitigation.resistances.includes(type);
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() =>
+                    onUpdate((prev) => ({
+                      ...prev,
+                      damageMitigation: {
+                        ...prev.damageMitigation,
+                        resistances: active
+                          ? prev.damageMitigation.resistances.filter((r) => r !== type)
+                          : [...prev.damageMitigation.resistances, type],
+                      },
+                    }))
+                  }
+                  className={`rounded border px-2 py-1 text-[11px] transition-colors ${
+                    active
+                      ? 'border-sky-500/50 bg-sky-500/15 font-medium text-sky-200'
+                      : 'border-[#1e2332] bg-[#0d1018] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {type}
+                </button>
+              );
+            })}
+          </div>
+          {sheet.damageMitigation.resistances.filter(
+            (r) => !DAMAGE_TYPE_OPTIONS.includes(r as DamageTypeKey)
+          ).length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[#181c28] pt-2 text-xs">
+              {sheet.damageMitigation.resistances
+                .filter((r) => !DAMAGE_TYPE_OPTIONS.includes(r as DamageTypeKey))
+                .map((custom) => (
+                  <button
+                    key={custom}
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() =>
+                      onUpdate((prev) => ({
+                        ...prev,
+                        damageMitigation: {
+                          ...prev.damageMitigation,
+                          resistances: prev.damageMitigation.resistances.filter(
+                            (r) => r !== custom
+                          ),
+                        },
+                      }))
+                    }
+                    className="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-200"
+                  >
+                    {custom}
+                    {readOnly ? '' : ' ×'}
+                  </button>
+                ))}
+            </div>
+          )}
+          {!readOnly && (
+            <div className="mt-3 flex gap-1.5 border-t border-[#181c28] pt-3 text-xs">
+              <input
+                type="text"
+                placeholder="Outra resistência..."
+                value={newResistanceText}
+                onChange={(e) => setNewResistanceText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const val = newResistanceText.trim();
+                    if (val && !sheet.damageMitigation.resistances.includes(val)) {
+                      onUpdate((prev) => ({
+                        ...prev,
+                        damageMitigation: {
+                          ...prev.damageMitigation,
+                          resistances: [...prev.damageMitigation.resistances, val],
+                        },
+                      }));
+                      setNewResistanceText('');
+                    }
+                  }
+                }}
+                className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const val = newResistanceText.trim();
+                  if (!val || sheet.damageMitigation.resistances.includes(val)) return;
+                  onUpdate((prev) => ({
+                    ...prev,
+                    damageMitigation: {
+                      ...prev.damageMitigation,
+                      resistances: [...prev.damageMitigation.resistances, val],
+                    },
+                  }));
+                  setNewResistanceText('');
+                }}
+                className="rounded border border-[#2a3145] bg-[#171b28] px-2.5 py-1 text-xs text-slate-200 hover:bg-[#202638]"
+              >
+                Adicionar
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* 2. REDUÇÕES DE DANO (RD) */}
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+          <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">
+                Reduções de Dano (RD)
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                RD Geral não se aplica a Dano na alma.
+              </p>
+            </div>
             <label className="flex items-center gap-2 text-xs text-slate-400">
               RD Geral
               <input
@@ -1836,7 +2480,7 @@ export function PersonalSheetTab({
               />
             </label>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-1 text-xs sm:grid-cols-2">
             {(Object.keys(sheet.damageMitigation.byType) as DamageTypeKey[]).map(
               (type) => {
                 const entry = sheet.damageMitigation.byType[type];
@@ -1880,7 +2524,166 @@ export function PersonalSheetTab({
           </div>
         </section>
 
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-7">
+        {/* 3. IMUNIDADES */}
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+          <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">Imunidades</h2>
+              <p className="text-[11px] text-slate-400">
+                Tipos de dano ou condições às quais o personagem é imune.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2.5 text-xs">
+            <div>
+              <div className="mb-1 text-[11px] font-medium text-slate-400">
+                Tipos de Dano
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {DAMAGE_TYPE_OPTIONS.map((type) => {
+                  const active = sheet.damageMitigation.immunities.includes(type);
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() =>
+                        onUpdate((prev) => ({
+                          ...prev,
+                          damageMitigation: {
+                            ...prev.damageMitigation,
+                            immunities: active
+                              ? prev.damageMitigation.immunities.filter((i) => i !== type)
+                              : [...prev.damageMitigation.immunities, type],
+                          },
+                        }))
+                      }
+                      className={`rounded border px-2 py-1 text-[11px] transition-colors ${
+                        active
+                          ? 'border-emerald-500/50 bg-emerald-500/15 font-medium text-emerald-200'
+                          : 'border-[#1e2332] bg-[#0d1018] text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {!readOnly && (
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-[#181c28] pt-2">
+                <select
+                  defaultValue=""
+                  aria-label="Adicionar condição imune"
+                  onChange={(e) => {
+                    const cond = e.target.value;
+                    if (cond && !sheet.damageMitigation.immunities.includes(cond)) {
+                      onUpdate((prev) => ({
+                        ...prev,
+                        damageMitigation: {
+                          ...prev.damageMitigation,
+                          immunities: [...prev.damageMitigation.immunities, cond],
+                        },
+                      }));
+                    }
+                    e.target.value = '';
+                  }}
+                  className="rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-300"
+                >
+                  <option value="">+ Imunidade a condição...</option>
+                  {SIMPLE_CONDITION_LIST.map((cond) => (
+                    <option key={cond} value={cond}>
+                      {cond}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {sheet.damageMitigation.immunities.filter(
+              (imm) => !DAMAGE_TYPE_OPTIONS.includes(imm as DamageTypeKey)
+            ).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 border-t border-[#181c28] pt-2">
+                {sheet.damageMitigation.immunities
+                  .filter((imm) => !DAMAGE_TYPE_OPTIONS.includes(imm as DamageTypeKey))
+                  .map((custom) => (
+                    <button
+                      key={custom}
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() =>
+                        onUpdate((prev) => ({
+                          ...prev,
+                          damageMitigation: {
+                            ...prev.damageMitigation,
+                            immunities: prev.damageMitigation.immunities.filter(
+                              (i) => i !== custom
+                            ),
+                          },
+                        }))
+                      }
+                      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200"
+                    >
+                      {custom}
+                      {readOnly ? '' : ' ×'}
+                    </button>
+                  ))}
+              </div>
+            )}
+
+            {!readOnly && (
+              <div className="flex gap-1.5 border-t border-[#181c28] pt-2">
+                <input
+                  type="text"
+                  placeholder="Outra imunidade..."
+                  value={newImmunityText}
+                  onChange={(e) => setNewImmunityText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = newImmunityText.trim();
+                      if (val && !sheet.damageMitigation.immunities.includes(val)) {
+                        onUpdate((prev) => ({
+                          ...prev,
+                          damageMitigation: {
+                            ...prev.damageMitigation,
+                            immunities: [...prev.damageMitigation.immunities, val],
+                          },
+                        }));
+                        setNewImmunityText('');
+                      }
+                    }
+                  }}
+                  className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = newImmunityText.trim();
+                    if (!val || sheet.damageMitigation.immunities.includes(val)) return;
+                    onUpdate((prev) => ({
+                      ...prev,
+                      damageMitigation: {
+                        ...prev.damageMitigation,
+                        immunities: [...prev.damageMitigation.immunities, val],
+                      },
+                    }));
+                    setNewImmunityText('');
+                  }}
+                  className="rounded border border-[#2a3145] bg-[#171b28] px-2.5 py-1 text-xs text-slate-200 hover:bg-[#202638]"
+                >
+                  Adicionar
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Características, Votos, Anotações e Condições */}
+      <div className="grid grid-cols-1 gap-6">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
           <h2 className="mb-3 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
             Características, Votos, Anotações e Condições
           </h2>

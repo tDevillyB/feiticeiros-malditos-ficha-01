@@ -18,7 +18,7 @@ export function TrainingsTab({ sheet, onUpdate, readOnly }: TrainingsTabProps) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold text-slate-100">
@@ -69,8 +69,8 @@ export function TrainingsTab({ sheet, onUpdate, readOnly }: TrainingsTabProps) {
         </div>
       </section>
 
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
-        <div className="mb-4 flex items-center justify-between border-b border-[#1d2230] pb-3">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-3">
           <h3 className="text-sm font-semibold text-slate-100">
             Treinamentos Registrados
           </h3>
@@ -137,7 +137,7 @@ export function TrainingsTab({ sheet, onUpdate, readOnly }: TrainingsTabProps) {
                         },
                       }))
                     }
-                    className="min-w-52 flex-1 bg-transparent text-sm font-semibold text-slate-100 focus:outline-none"
+                    className="min-w-0 w-full flex-1 bg-transparent text-sm font-semibold text-slate-100 focus:outline-none sm:w-auto sm:min-w-52"
                   />
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <select

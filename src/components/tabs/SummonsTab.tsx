@@ -306,7 +306,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
   return (
     <div className="space-y-6">
       {/* Cabeçalho Unificado de Shikigamis */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div>
           <h2 className="text-base font-semibold text-slate-100">
             Shikigamis ({sheet.summons.length})
@@ -317,7 +317,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
         </div>
 
         {!readOnly && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {savedTemplates.length > 0 && (
               <select
                 defaultValue=""
@@ -327,7 +327,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                   if (found) addSummonFromTemplate(found);
                   e.target.value = '';
                 }}
-                className="rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-2 text-xs text-slate-200"
+                className="w-full min-w-0 max-w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-2 text-xs text-slate-200 sm:w-auto"
               >
                 <option value="">Reutilizar modelo salvo...</option>
                 {savedTemplates.map((tpl) => (
@@ -340,7 +340,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
             <button
               type="button"
               onClick={() => addSummonFromTemplate()}
-              className="inline-flex items-center gap-1.5 rounded border border-indigo-500/50 bg-indigo-600/20 px-3.5 py-2 text-xs font-medium text-indigo-100 hover:bg-indigo-600/30 whitespace-nowrap shrink-0"
+              className="inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded border border-indigo-500/50 bg-indigo-600/20 px-3.5 py-2 text-xs font-medium text-indigo-100 hover:bg-indigo-600/30 whitespace-nowrap shrink-0 sm:min-h-0 sm:w-auto"
             >
               <Plus className="h-4 w-4" />
               Novo Shikigami
@@ -376,24 +376,24 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
             return (
               <section
                 key={summon.id}
-                className="rounded-lg border border-[#212636] bg-[#11141e] p-5"
+                className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5"
               >
                 {/* Topo: Retrato, Identificação e Controles Rápidos */}
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-[#1d2230] pb-4">
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto">
                     {summon.imageUrl ? (
                       <img
                         src={summon.imageUrl}
                         alt={summon.name}
-                        className="h-14 w-14 rounded-lg border border-[#2a3145] object-cover"
+                        className="h-14 w-14 shrink-0 rounded-lg border border-[#2a3145] object-cover"
                       />
                     ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-[#2a3145] bg-[#0d1018] text-sm font-bold text-indigo-300">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#2a3145] bg-[#0d1018] text-sm font-bold text-indigo-300">
                         {summon.name.trim().slice(0, 2).toUpperCase() || 'SH'}
                       </div>
                     )}
 
-                    <div className="space-y-1.5">
+                    <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <input
                           type="text"
@@ -406,7 +406,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                               name: e.target.value,
                             }))
                           }
-                          className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-semibold text-slate-100"
+                          className="min-w-0 w-full rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-semibold text-slate-100 sm:w-auto"
                         />
                         <input
                           type="text"
@@ -419,7 +419,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                               grade: e.target.value,
                             }))
                           }
-                          className="w-32 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300"
+                          className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 sm:w-32 sm:flex-initial"
                         />
                         <input
                           type="text"
@@ -432,7 +432,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                               summonType: e.target.value,
                             }))
                           }
-                          className="w-32 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300"
+                          className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 sm:w-32 sm:flex-initial"
                         />
                       </div>
                       <input
@@ -460,7 +460,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                           type="button"
                           onClick={() => adjustSummonHp(summon.id, delta)}
                           title={delta < 0 ? `Dano ${delta} PV` : `Cura +${delta} PV`}
-                          className={`rounded border border-[#242a3b] bg-[#0d1018] px-2 py-1 font-mono-tabular text-xs ${
+                          className={`min-h-[38px] rounded border border-[#242a3b] bg-[#0d1018] px-2.5 py-1 font-mono-tabular text-xs sm:min-h-0 sm:px-2 ${
                             delta < 0
                               ? 'text-red-300 hover:bg-red-500/15'
                               : 'text-emerald-300 hover:bg-emerald-500/15'
@@ -732,7 +732,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                                     ),
                                   }))
                                 }
-                                className="min-w-36 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 font-semibold text-slate-100"
+                                className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 font-semibold text-slate-100 sm:w-auto sm:min-w-36"
                               />
                               <select
                                 disabled={readOnly}
@@ -985,7 +985,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                                     ),
                                   }))
                                 }
-                                className="min-w-36 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 font-semibold text-slate-100"
+                                className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 font-semibold text-slate-100 sm:w-auto sm:min-w-36"
                               />
                               <select
                                 disabled={readOnly}
@@ -1088,7 +1088,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                           </button>
                         ))}
                         {!readOnly && (
-                          <div className="flex items-center gap-1">
+                          <div className="flex w-full items-center gap-1 sm:w-auto">
                             <input
                               type="text"
                               placeholder="Nova resistência..."
@@ -1115,7 +1115,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                                   }
                                 }
                               }}
-                              className="w-36 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 text-[11px] text-slate-200"
+                              className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 text-[11px] text-slate-200 sm:w-36 sm:flex-initial"
                             />
                             <button
                               type="button"
@@ -1164,7 +1164,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                           </button>
                         ))}
                         {!readOnly && (
-                          <div className="flex items-center gap-1">
+                          <div className="flex w-full items-center gap-1 sm:w-auto">
                             <input
                               type="text"
                               placeholder="Nova imunidade..."
@@ -1191,7 +1191,7 @@ export function SummonsTab({ sheet, onUpdate, readOnly }: SummonsTabProps) {
                                   }
                                 }
                               }}
-                              className="w-36 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 text-[11px] text-slate-200"
+                              className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 text-[11px] text-slate-200 sm:w-36 sm:flex-initial"
                             />
                             <button
                               type="button"

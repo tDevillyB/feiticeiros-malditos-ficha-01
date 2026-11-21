@@ -1,13 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
+  Backpack,
   Copy,
   Download,
+  Dumbbell,
+  Ghost,
   Lock,
+  Menu,
   Plus,
   Shield,
+  Sparkles,
   Trash2,
   Unlock,
   Upload,
+  User,
+  Wallet,
+  X,
 } from 'lucide-react';
 import { GradeBadge } from './components/GradeBadge';
 import { CursedProfileTab } from './components/tabs/CursedProfileTab';
@@ -49,14 +57,18 @@ type SheetTabId =
 const STORAGE_KEY = 'fm25_obr_vanilla_sheets_v1';
 const GM_REMOTE_CACHE_KEY = 'fm25_obr_gm_remote_sheets_v1';
 
-const TAB_ITEMS: Array<{ id: SheetTabId; label: string }> = [
-  { id: 'pessoal', label: 'Ficha Pessoal' },
-  { id: 'amaldicoado', label: 'Perfil Amaldiçoado' },
-  { id: 'invocacoes', label: 'Shikigamis' },
-  { id: 'inventario', label: 'Registro e Inventário' },
-  { id: 'treinamentos', label: 'Treinamentos' },
-  { id: 'carteira', label: 'Carteira' },
-  { id: 'escudo', label: 'Escudo do Mestre' },
+const TAB_ITEMS: Array<{
+  id: SheetTabId;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  { id: 'pessoal', label: 'Ficha Pessoal', icon: User },
+  { id: 'amaldicoado', label: 'Perfil Amaldiçoado', icon: Sparkles },
+  { id: 'invocacoes', label: 'Shikigamis', icon: Ghost },
+  { id: 'inventario', label: 'Registro e Inventário', icon: Backpack },
+  { id: 'treinamentos', label: 'Treinamentos', icon: Dumbbell },
+  { id: 'carteira', label: 'Carteira', icon: Wallet },
+  { id: 'escudo', label: 'Escudo do Mestre', icon: Shield },
 ];
 
 function loadInitialSheets(): FichaPersonagem[] {
@@ -115,6 +127,7 @@ export default function App() {
     () => localSheets[0]?.id ?? ''
   );
   const [activeTab, setActiveTab] = useState<SheetTabId>('pessoal');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [requestedShieldSubView, setRequestedShieldSubView] = useState<{
     view: 'overview' | 'control';
     nonce: number;
@@ -1213,13 +1226,25 @@ export default function App() {
   const activeGrade = resolveCalculableValue(activeSheet.identity.grade);
 
   return (
-    <div className="min-h-screen bg-[#0b0d13] text-slate-100">
+    <div className="min-h-screen overflow-x-clip bg-[#0b0d13] text-slate-100">
       {/* Barra Superior */}
       <header className="sticky top-0 z-20 border-b border-[#1d2230] bg-[#0d1018]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-8 px-4 py-3 sm:px-6">
-          <span className="text-base font-bold tracking-tight text-slate-100 whitespace-nowrap shrink-0">
-            Feiticeiros & Maldições 2.5
-          </span>
+        <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-2 px-3 py-2 sm:gap-8 sm:px-6 sm:py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              aria-expanded={mobileNavOpen}
+              aria-controls="mobile-sections-drawer"
+              aria-label={mobileNavOpen ? 'Fechar menu de seções' : 'Abrir menu de seções'}
+              onClick={() => setMobileNavOpen((prev) => !prev)}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#242a3b] bg-[#11141e] text-slate-200 hover:bg-[#1a1f30] lg:hidden"
+            >
+              {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+            <span className="truncate text-sm font-bold tracking-tight text-slate-100 sm:shrink-0 sm:whitespace-nowrap sm:text-base">
+              Feiticeiros & Maldições 2.5
+            </span>
+          </div>
 
           <nav
             aria-label="Seções da ficha"
@@ -1245,46 +1270,88 @@ export default function App() {
             <button
               type="button"
               onClick={handleCreateSheet}
-              className="inline-flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 whitespace-nowrap shrink-0"
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 whitespace-nowrap shrink-0 sm:min-h-0 sm:px-4"
             >
               <Plus className="h-3.5 w-3.5" />
-              Nova Ficha
+              <span>Nova Ficha</span>
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 overflow-x-auto border-t border-[#181c28] px-4 py-2 lg:hidden">
-          {TAB_ITEMS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                activeTab === tab.id
-                  ? 'bg-indigo-600/25 text-indigo-100'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Drawer recolhível de navegação no mobile (< lg) */}
+        {mobileNavOpen && (
+          <nav
+            id="mobile-sections-drawer"
+            aria-label="Menu completo de seções"
+            className="max-h-[75vh] overflow-y-auto border-t border-[#181c28] bg-[#0b0e17] px-3 py-2.5 lg:hidden"
+          >
+            <div className="grid grid-cols-1 gap-1.5 min-[400px]:grid-cols-2">
+              {TAB_ITEMS.map((tab) => {
+                const Icon = tab.icon;
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setMobileNavOpen(false);
+                    }}
+                    className={`flex min-h-[42px] items-center gap-2.5 rounded border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                      active
+                        ? 'border-indigo-500/60 bg-indigo-600/20 text-indigo-100'
+                        : 'border-[#1e2332] bg-[#11141e] text-slate-300 hover:text-slate-100'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-indigo-300" />
+                    <span className="truncate">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
+
+        {/* Faixa rápida horizontal no mobile (< lg) */}
+        <div className="mobile-snap-track flex items-center gap-1.5 overflow-x-auto border-t border-[#181c28] px-3 py-1.5 lg:hidden">
+          {TAB_ITEMS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setMobileNavOpen(false);
+                }}
+                className={`inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-600/25 text-indigo-100 ring-1 ring-inset ring-indigo-500/40'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </header>
 
       <main
-        className={`mx-auto space-y-6 px-4 py-5 sm:px-6 ${
+        className={`mx-auto space-y-5 px-3 py-4 sm:space-y-6 sm:px-6 sm:py-5 ${
           activeTab === 'inventario' ? 'max-w-full' : 'max-w-[1360px]'
         }`}
       >
         {/* Barra de Contexto da Mesa */}
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#212636] bg-[#11141e] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-slate-400">
-              Ficha Ativa
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#212636] bg-[#11141e] px-3 py-3 sm:gap-4 sm:px-4">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            <label className="flex w-full min-w-0 flex-col gap-1 text-xs text-slate-400 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
+              <span className="shrink-0">Ficha Ativa</span>
               <select
                 value={activeSheet.id}
                 onChange={(e) => handleOpenFullSheet(e.target.value)}
-                className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full min-w-0 max-w-full rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-indigo-500 focus:outline-none sm:w-auto"
               >
                 {accessibleFullSheets.map((s, idx) => {
                   const isRemote = !localSheets.some((loc) => loc.id === s.id);
@@ -1300,7 +1367,7 @@ export default function App() {
               </select>
             </label>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
               <span>{activeSheet.identity.specialization || 'Sem especialização'}</span>
               <span aria-hidden="true">·</span>
               <span>{activeSheet.identity.origin || 'Sem origem'}</span>
@@ -1320,22 +1387,22 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             {/* Papel: dentro do OBR vem estritamente de OBR.player.getRole(); fora do OBR mantém alternância local */}
             {obrCtx.isInsideOBR ? (
               <div
-                className="inline-flex items-center gap-1.5 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs font-medium text-slate-200 whitespace-nowrap shrink-0"
+                className="col-span-2 inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs font-medium text-slate-200 whitespace-nowrap shrink-0 sm:col-span-1 sm:min-h-0 sm:justify-start"
                 title="Papel detectado automaticamente pelo Owlbear Rodeo"
               >
                 <Shield className="h-3.5 w-3.5 text-indigo-300" />
                 {viewerRole === 'GM' ? 'Mestre (OBR)' : 'Jogador (OBR)'}
               </div>
             ) : (
-              <div className="flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5">
+              <div className="col-span-2 grid grid-cols-2 items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5 sm:col-span-1 sm:flex">
                 <button
                   type="button"
                   onClick={() => setLocalFallbackRole('GM')}
-                  className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                  className={`inline-flex min-h-[36px] items-center justify-center gap-1 rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 sm:min-h-0 ${
                     viewerRole === 'GM'
                       ? 'bg-[#22283a] text-slate-100'
                       : 'text-slate-400 hover:text-slate-200'
@@ -1347,7 +1414,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setLocalFallbackRole('PLAYER')}
-                  className={`rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 ${
+                  className={`inline-flex min-h-[36px] items-center justify-center rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap shrink-0 sm:min-h-0 ${
                     viewerRole === 'PLAYER'
                       ? 'bg-[#22283a] text-slate-100'
                       : 'text-slate-400 hover:text-slate-200'
@@ -1370,7 +1437,7 @@ export default function App() {
                     },
                   }))
                 }
-                className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+                className={`col-span-2 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 sm:col-span-1 sm:min-h-0 sm:justify-start ${
                   activeSheet.permissions.lockedByGM
                     ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
                     : 'border-[#242a3b] bg-[#0b0d14] text-slate-300 hover:bg-[#171b28]'
@@ -1395,7 +1462,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleDuplicateSheet}
-                  className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
+                  className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0 sm:min-h-0 sm:justify-start"
                 >
                   <Copy className="h-3.5 w-3.5" />
                   Duplicar
@@ -1404,7 +1471,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleExportJson}
-                  className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
+                  className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0 sm:min-h-0 sm:justify-start"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Exportar
@@ -1412,7 +1479,7 @@ export default function App() {
               </>
             )}
 
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0">
+            <label className="inline-flex min-h-[40px] cursor-pointer items-center justify-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0 sm:min-h-0 sm:justify-start">
               <Upload className="h-3.5 w-3.5" />
               Importar
               <input
@@ -1426,18 +1493,18 @@ export default function App() {
             {isLocalActiveSheet && (
               <>
                 {confirmDeleteId === activeSheet.id ? (
-                  <div className="flex items-center gap-1">
+                  <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1 sm:gap-1">
                     <button
                       type="button"
                       onClick={() => handleDeleteSheet(activeSheet.id)}
-                      className="rounded border border-red-500/60 bg-red-500/20 px-2.5 py-1.5 text-xs font-medium text-red-200 whitespace-nowrap shrink-0"
+                      className="inline-flex min-h-[40px] flex-1 items-center justify-center rounded border border-red-500/60 bg-red-500/20 px-2.5 py-1.5 text-xs font-medium text-red-200 whitespace-nowrap shrink-0 sm:min-h-0 sm:flex-initial"
                     >
                       Confirmar
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmDeleteId(null)}
-                      className="rounded border border-[#242a3b] px-2 py-1.5 text-xs text-slate-400 whitespace-nowrap shrink-0"
+                      className="inline-flex min-h-[40px] flex-1 items-center justify-center rounded border border-[#242a3b] px-2 py-1.5 text-xs text-slate-400 whitespace-nowrap shrink-0 sm:min-h-0 sm:flex-initial"
                     >
                       Cancelar
                     </button>
@@ -1446,7 +1513,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteId(activeSheet.id)}
-                    className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300 whitespace-nowrap shrink-0"
+                    className="inline-flex min-h-[40px] items-center justify-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-400 hover:border-red-500/40 hover:text-red-300 whitespace-nowrap shrink-0 sm:min-h-0 sm:justify-start"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {localSheets.length <= 1 ? 'Zerar' : 'Excluir'}

@@ -47,7 +47,7 @@ export function WalletTab({ sheet, onUpdate, readOnly }: WalletTabProps) {
   return (
     <div className="space-y-6">
       {/* Resumo Financeiro e XP */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <h2 className="mb-4 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
           Carteira, XP e Missões
         </h2>
@@ -132,7 +132,7 @@ export function WalletTab({ sheet, onUpdate, readOnly }: WalletTabProps) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Transações Financeiras */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-7">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5 lg:col-span-7">
           <h3 className="mb-3 border-b border-[#1d2230] pb-2 text-sm font-semibold text-slate-100">
             Transações Financeiras ({wallet.finances.currencyLabel})
           </h3>
@@ -144,7 +144,7 @@ export function WalletTab({ sheet, onUpdate, readOnly }: WalletTabProps) {
                 onChange={(e) =>
                   setTxType(e.target.value as WalletTransactionType)
                 }
-                className="rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-100"
+                className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-100 sm:flex-initial"
               >
                 <option value="adicao">Adição (+)</option>
                 <option value="retirada">Retirada (-)</option>
@@ -155,19 +155,19 @@ export function WalletTab({ sheet, onUpdate, readOnly }: WalletTabProps) {
                 value={txAmount}
                 onChange={(e) => setTxAmount(e.target.value)}
                 placeholder="Valor"
-                className="w-24 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-right font-mono-tabular text-xs text-slate-100"
+                className="w-24 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-right font-mono-tabular text-xs text-slate-100 sm:flex-initial"
               />
               <input
                 type="text"
                 value={txDescription}
                 onChange={(e) => setTxDescription(e.target.value)}
                 placeholder="Descrição da transação..."
-                className="min-w-40 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-100"
+                className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-100 sm:w-auto sm:min-w-40"
               />
               <button
                 type="button"
                 onClick={handleAddTransaction}
-                className="inline-flex items-center gap-1 rounded border border-indigo-500/50 bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-100 hover:bg-indigo-600/30 whitespace-nowrap shrink-0"
+                className="inline-flex min-h-[40px] w-full items-center justify-center gap-1 rounded border border-indigo-500/50 bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-100 hover:bg-indigo-600/30 whitespace-nowrap shrink-0 sm:min-h-0 sm:w-auto"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Registrar
@@ -228,7 +228,7 @@ export function WalletTab({ sheet, onUpdate, readOnly }: WalletTabProps) {
         </section>
 
         {/* Missões e XP */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5 lg:col-span-5">
           <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
             <h3 className="text-sm font-semibold text-slate-100">
               Missões ({wallet.missions.length})

@@ -144,7 +144,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
           </div>
 
           {/* Bloco Superior: Foto na esquerda + Dados de Aparência ao lado */}
-          <div className="grid grid-cols-[100px_minmax(0,1fr)] items-start gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
+          <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-2.5 sm:grid-cols-[112px_minmax(0,1fr)] sm:gap-3">
             <div className="space-y-1.5">
               {avatarUrl && !avatarFailed ? (
                 <img
@@ -178,7 +178,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
             </div>
 
             {/* Dados de Aparência imediatamente ao lado da foto */}
-            <div className="grid grid-cols-2 gap-1.5 text-xs">
+            <div className="grid grid-cols-1 gap-1.5 text-xs min-[360px]:grid-cols-2">
               <label className="flex flex-col gap-0.5 text-[10px] text-slate-400">
                 Idade
                 <input
@@ -317,7 +317,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
       {/* COLUNA DIREITA (70%-75%): INVENTÁRIO PRINCIPAL */}
       <div className="min-w-0 space-y-4">
         {/* Resumo de Peso e Valor */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] px-5 py-4">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] px-3.5 py-3.5 sm:px-5 sm:py-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold text-slate-100">Inventário</h2>
@@ -325,7 +325,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                 Controle de peso carregado, itens comuns e equipamentos personalizáveis.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-5">
+            <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-5">
               <CalculableValueControl
                 label="Peso Atual"
                 field={currentWeightField}
@@ -401,7 +401,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
         </section>
 
         {/* Itens Comuns (Nome, Quantidade, Custo, Peso) */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-2.5">
             <div>
               <h3 className="text-sm font-semibold text-slate-100">
@@ -439,7 +439,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                     },
                   }))
                 }
-                className="inline-flex items-center gap-1 rounded border border-[#2a3145] bg-[#171b28] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-[#202638] whitespace-nowrap shrink-0"
+                className="inline-flex min-h-[38px] items-center gap-1 rounded border border-[#2a3145] bg-[#171b28] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-[#202638] whitespace-nowrap shrink-0 sm:min-h-0"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Adicionar Item
@@ -450,7 +450,140 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
           {inv.items.length === 0 ? (
             <p className="text-xs text-slate-500">Nenhum item comum registrado.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* Mobile: Cards sem rolagem horizontal */}
+              <div className="space-y-2.5 sm:hidden">
+                {inv.items.map((item) => {
+                  const unitW = item.unitWeight ?? item.unitSpaces ?? 0;
+                  const totalW = resolveCalculableValue(
+                    item.totalWeight ?? item.totalSpaces
+                  );
+                  return (
+                    <div
+                      key={item.id}
+                      className="space-y-2 rounded border border-[#1e2332] bg-[#0d1018] p-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          disabled={readOnly}
+                          value={item.name}
+                          onChange={(e) =>
+                            onUpdate((prev) => ({
+                              ...prev,
+                              inventory: {
+                                ...prev.inventory,
+                                items: prev.inventory.items.map((it) =>
+                                  it.id === item.id
+                                    ? { ...it, name: e.target.value }
+                                    : it
+                                ),
+                              },
+                            }))
+                          }
+                          className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 font-medium text-slate-100"
+                        />
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdate((prev) => ({
+                                ...prev,
+                                inventory: {
+                                  ...prev.inventory,
+                                  items: prev.inventory.items.filter(
+                                    (it) => it.id !== item.id
+                                  ),
+                                },
+                              }))
+                            }
+                            title="Remover item"
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[#242a3b] bg-[#0b0d14] text-slate-400 hover:border-red-500/40 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Qtd
+                          <input
+                            type="number"
+                            min={0}
+                            disabled={readOnly}
+                            value={item.quantity}
+                            onChange={(e) =>
+                              onUpdate((prev) => ({
+                                ...prev,
+                                inventory: {
+                                  ...prev.inventory,
+                                  items: prev.inventory.items.map((it) =>
+                                    it.id === item.id
+                                      ? { ...it, quantity: Number(e.target.value) || 0 }
+                                      : it
+                                  ),
+                                },
+                              }))
+                            }
+                            className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-right font-mono-tabular text-slate-100"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Custo (¥)
+                          <input
+                            type="number"
+                            min={0}
+                            disabled={readOnly}
+                            value={item.unitCost}
+                            onChange={(e) =>
+                              onUpdate((prev) => ({
+                                ...prev,
+                                inventory: {
+                                  ...prev.inventory,
+                                  items: prev.inventory.items.map((it) =>
+                                    it.id === item.id
+                                      ? { ...it, unitCost: Number(e.target.value) || 0 }
+                                      : it
+                                  ),
+                                },
+                              }))
+                            }
+                            className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-right font-mono-tabular text-slate-100"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                          Peso {item.quantity > 1 ? `(${totalW})` : ''}
+                          <input
+                            type="number"
+                            step="0.5"
+                            min={0}
+                            disabled={readOnly}
+                            value={unitW}
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              onUpdate((prev) => ({
+                                ...prev,
+                                inventory: {
+                                  ...prev.inventory,
+                                  items: prev.inventory.items.map((it) =>
+                                    it.id === item.id
+                                      ? { ...it, unitWeight: val, unitSpaces: val }
+                                      : it
+                                  ),
+                                },
+                              }));
+                            }}
+                            className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-right font-mono-tabular text-slate-100"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop: Tabela intacta */}
+              <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-[#1d2230] text-slate-400">
@@ -594,12 +727,13 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </section>
 
         {/* Equipamentos Personalizáveis (Cards Adaptativos) */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-3">
             <div>
               <h3 className="text-sm font-semibold text-slate-100">
@@ -610,14 +744,14 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
               </p>
             </div>
             {!readOnly && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 <select
                   aria-label="Categoria do novo equipamento"
                   value={newEquipmentCategory}
                   onChange={(e) =>
                     setNewEquipmentCategory(e.target.value as EquipmentCategory)
                   }
-                  className="rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-200"
+                  className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1.5 text-xs text-slate-200 sm:flex-initial"
                 >
                   {(
                     Object.keys(EQUIPMENT_CATEGORY_LABELS) as EquipmentCategory[]
@@ -701,7 +835,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                                   name: e.target.value,
                                 }))
                               }
-                              className="min-w-36 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 text-sm font-semibold text-slate-100"
+                              className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 text-sm font-semibold text-slate-100 sm:w-auto sm:min-w-36"
                             />
                             <label className="inline-flex shrink-0 items-center gap-1.5 rounded border border-[#242a3b] bg-[#11141e] px-2 py-1 text-[11px] text-slate-300">
                               <input
@@ -1099,7 +1233,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                       ) : (
                         <div className="space-y-1.5">
                           {(eq.customFields ?? []).map((cf) => (
-                            <div key={cf.id} className="flex items-center gap-2">
+                            <div key={cf.id} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                               <input
                                 type="text"
                                 disabled={readOnly}
@@ -1115,7 +1249,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                                     ),
                                   }))
                                 }
-                                className="w-32 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200"
+                                className="min-w-0 w-28 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200 sm:w-32"
                               />
                               <input
                                 type="text"
@@ -1132,7 +1266,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                                     ),
                                   }))
                                 }
-                                className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-100"
+                                className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-100"
                               />
                               {!readOnly && (
                                 <button
@@ -1208,7 +1342,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                                     ),
                                   }))
                                 }
-                                className="w-36 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] font-medium text-amber-200"
+                                className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] font-medium text-amber-200 sm:w-36"
                               />
                               <input
                                 type="text"
@@ -1225,7 +1359,7 @@ export function InventoryTab({ sheet, onUpdate, readOnly }: InventoryTabProps) {
                                     ),
                                   }))
                                 }
-                                className="min-w-36 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200"
+                                className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200 sm:w-auto sm:min-w-36"
                               />
                               {!readOnly && (
                                 <button

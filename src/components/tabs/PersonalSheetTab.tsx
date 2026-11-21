@@ -169,12 +169,12 @@ export function PersonalSheetTab({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {canOpenCombatCenter && onOpenCombatCenter && (
               <button
                 type="button"
                 onClick={onOpenCombatCenter}
-                className="inline-flex items-center gap-1.5 rounded border border-indigo-500/40 bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-100 hover:bg-indigo-600/35 whitespace-nowrap shrink-0"
+                className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded border border-indigo-500/40 bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-100 hover:bg-indigo-600/35 whitespace-nowrap shrink-0 sm:min-h-0 sm:flex-initial"
               >
                 <Swords className="h-3.5 w-3.5" />
                 Central de Combate
@@ -187,7 +187,7 @@ export function PersonalSheetTab({
                 aria-expanded={showPrivacyPanel}
                 aria-label="Configurações de privacidade e compartilhamento"
                 onClick={() => setShowPrivacyPanel((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                className={`inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 sm:min-h-0 sm:flex-initial ${
                   showPrivacyPanel
                     ? 'border-indigo-500/60 bg-indigo-600/25 text-indigo-100'
                     : 'border-[#242a3b] bg-[#0b0d14] text-slate-300 hover:bg-[#171b28]'
@@ -317,12 +317,12 @@ export function PersonalSheetTab({
       </section>
 
       {/* Identidade e Progressão */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-[#1d2230] pb-3">
           <h2 className="text-base font-semibold text-slate-100">
             Identidade e Progressão
           </h2>
-          <div className="flex flex-wrap items-center gap-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
             <CalculableValueControl
               label="Nível Total"
               field={sheet.identity.level}
@@ -455,7 +455,7 @@ export function PersonalSheetTab({
           </label>
 
           <div className="flex gap-2">
-            <label className="flex flex-1 flex-col gap-1 text-xs text-slate-400">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-400">
               Especialização
               <input
                 type="text"
@@ -467,10 +467,10 @@ export function PersonalSheetTab({
                     identity: { ...prev.identity, specialization: e.target.value },
                   }))
                 }
-                className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
+                className="min-w-0 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
               />
             </label>
-            <label className="flex w-20 flex-col gap-1 text-xs text-slate-400">
+            <label className="flex w-20 shrink-0 flex-col gap-1 text-xs text-slate-400">
               Nvl
               <NumericInput
                 min={0}
@@ -494,7 +494,7 @@ export function PersonalSheetTab({
           </div>
 
           <div className="flex gap-2">
-            <label className="flex flex-1 flex-col gap-1 text-xs text-slate-400">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-400">
               Multiclasse
               <input
                 type="text"
@@ -506,10 +506,10 @@ export function PersonalSheetTab({
                     identity: { ...prev.identity, multiclass: e.target.value },
                   }))
                 }
-                className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
+                className="min-w-0 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
               />
             </label>
-            <label className="flex w-20 flex-col gap-1 text-xs text-slate-400">
+            <label className="flex w-20 shrink-0 flex-col gap-1 text-xs text-slate-400">
               Nvl
               <NumericInput
                 min={0}
@@ -629,7 +629,7 @@ export function PersonalSheetTab({
                     identity: { ...prev.identity, avatarUrl: e.target.value },
                   }))
                 }
-                className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
+                className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none disabled:opacity-60"
               />
             </div>
           </label>
@@ -639,7 +639,7 @@ export function PersonalSheetTab({
       {/* Grade Principal: Atributos + Recursos Vitais + Defesa */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Atributos */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-4">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5 lg:col-span-4">
           <h2 className="mb-4 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
             Atributos
           </h2>
@@ -649,7 +649,7 @@ export function PersonalSheetTab({
               return (
                 <div
                   key={key}
-                  className="flex items-center justify-between gap-3 border-b border-[#191e2b] pb-2.5 last:border-b-0 last:pb-0"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-[#191e2b] pb-2.5 last:border-b-0 last:pb-0 sm:flex-nowrap sm:gap-3"
                 >
                   <div>
                     <div className="text-sm font-medium text-slate-100">
@@ -718,7 +718,7 @@ export function PersonalSheetTab({
         </section>
 
         {/* Pontos de Vida, Extra v2.5, Energia, ER, Sanidade e Integridade */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5 lg:col-span-5">
           <h2 className="mb-4 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
             Pontos de Vida, Energia e Integridade
           </h2>
@@ -763,13 +763,13 @@ export function PersonalSheetTab({
               {!readOnly && (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] text-slate-500">Ajuste rápido PV:</span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 sm:gap-1">
                     {([-5, -1, 1, 5] as const).map((delta) => (
                       <button
                         key={delta}
                         type="button"
                         onClick={() => onUpdate((prev) => adjustPoolResource(prev, 'hp', delta))}
-                        className={`rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 font-mono-tabular text-[11px] font-medium ${
+                        className={`min-h-[38px] min-w-[40px] rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 font-mono-tabular text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-[11px] ${
                           delta < 0
                             ? 'text-red-300 hover:bg-red-500/15'
                             : 'text-emerald-300 hover:bg-emerald-500/15'
@@ -787,7 +787,7 @@ export function PersonalSheetTab({
                   style={{ width: `${Math.min(100, Math.max(0, hpPct))}%` }}
                 />
               </div>
-              <div className="grid grid-cols-4 gap-2 pt-1">
+              <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
                 {(
                   [
                     ['lost', 'Perdido', 0],
@@ -910,13 +910,13 @@ export function PersonalSheetTab({
               {!readOnly && (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] text-slate-500">Ajuste rápido PE:</span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 sm:gap-1">
                     {([-5, -1, 1, 5] as const).map((delta) => (
                       <button
                         key={delta}
                         type="button"
                         onClick={() => onUpdate((prev) => adjustPoolResource(prev, 'pe', delta))}
-                        className={`rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-0.5 font-mono-tabular text-[11px] font-medium ${
+                        className={`min-h-[38px] min-w-[40px] rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 font-mono-tabular text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-[11px] ${
                           delta < 0
                             ? 'text-red-300 hover:bg-red-500/15'
                             : 'text-indigo-200 hover:bg-indigo-500/15'
@@ -934,7 +934,7 @@ export function PersonalSheetTab({
                   style={{ width: `${Math.min(100, Math.max(0, pePct))}%` }}
                 />
               </div>
-              <div className="grid grid-cols-4 gap-2 pt-1">
+              <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
                 {(
                   [
                     ['lost', 'Perdido', 0],
@@ -1257,7 +1257,7 @@ export function PersonalSheetTab({
         </section>
 
         {/* Defesa, Derivados, Testes de Morte e Dados de Vida */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-3">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5 lg:col-span-3">
           <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
             <h2 className="text-base font-semibold text-slate-100">Defesa</h2>
             <CalculableValueControl
@@ -1597,18 +1597,18 @@ export function PersonalSheetTab({
 
       {/* Perícias + Salvaguardas e Ataques */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5 lg:col-span-7">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5 lg:col-span-7">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-3">
             <h2 className="text-base font-semibold text-slate-100">Perícias</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <div className="relative min-w-0 flex-1 sm:flex-initial">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
                 <input
                   type="text"
                   placeholder="Filtrar perícia..."
                   value={skillSearch}
                   onChange={(e) => setSkillSearch(e.target.value)}
-                  className="rounded border border-[#242a3b] bg-[#0b0d14] py-1.5 pr-3 pl-8 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded border border-[#242a3b] bg-[#0b0d14] py-1.5 pr-3 pl-8 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none sm:w-auto"
                 />
               </div>
               <div className="flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5">
@@ -1638,7 +1638,110 @@ export function PersonalSheetTab({
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile: Cards sem rolagem horizontal */}
+          <div className="space-y-2.5 sm:hidden">
+            {filteredSkills.map((skill) => (
+              <div
+                key={skill.id}
+                className="space-y-2 rounded border border-[#1e2332] bg-[#0d1018] p-3 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1 font-semibold text-slate-100">
+                    {skill.isCustomName ? (
+                      <input
+                        type="text"
+                        disabled={readOnly}
+                        value={skill.name}
+                        onChange={(e) =>
+                          updateProficiencyRow('skills', skill.id, {
+                            name: e.target.value,
+                          })
+                        }
+                        className="w-full min-w-0 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
+                      />
+                    ) : (
+                      <span className="break-words">{skill.name}</span>
+                    )}
+                  </div>
+                  <CalculableValueControl
+                    field={skill.total}
+                    signed
+                    readOnly={readOnly}
+                    size="sm"
+                    onChange={(total) =>
+                      updateProficiencyRow('skills', skill.id, { total })
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-0.5 min-[380px]:grid-cols-4">
+                  <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                    Atributo
+                    <select
+                      disabled={readOnly}
+                      value={skill.attribute}
+                      onChange={(e) =>
+                        updateProficiencyRow('skills', skill.id, {
+                          attribute: e.target.value as AttributeKey,
+                        })
+                      }
+                      className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
+                    >
+                      {ATTRIBUTE_KEYS.map((k) => (
+                        <option key={k} value={k}>
+                          {k}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex min-h-[40px] items-center justify-center gap-2 rounded border border-[#242a3b] bg-[#0b0d14] px-2 text-xs text-slate-200">
+                    <input
+                      type="checkbox"
+                      disabled={readOnly}
+                      checked={skill.trained}
+                      onChange={(e) =>
+                        updateProficiencyRow('skills', skill.id, {
+                          trained: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 accent-indigo-500"
+                    />
+                    Treinada
+                  </label>
+                  <label className="flex min-h-[40px] items-center justify-center gap-2 rounded border border-[#242a3b] bg-[#0b0d14] px-2 text-xs text-slate-200">
+                    <input
+                      type="checkbox"
+                      disabled={readOnly}
+                      checked={skill.mastered}
+                      onChange={(e) =>
+                        updateProficiencyRow('skills', skill.id, {
+                          mastered: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 accent-indigo-500"
+                    />
+                    Mestre
+                  </label>
+                  <label className="flex flex-col gap-1 text-[11px] text-slate-400">
+                    Outros
+                    <input
+                      type="number"
+                      disabled={readOnly}
+                      value={skill.other}
+                      onChange={(e) =>
+                        updateProficiencyRow('skills', skill.id, {
+                          other: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-right font-mono-tabular text-xs text-slate-100"
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: Tabela intacta */}
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[#1d2230] text-slate-400">
@@ -1749,7 +1852,7 @@ export function PersonalSheetTab({
 
         {/* Jogadas de Ataque, Testes de Resistência, Habilidades/Talentos e Armas */}
         <div className="space-y-6 lg:col-span-5">
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
             <h2 className="mb-3 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
               Jogadas de Ataque e Resistências
             </h2>
@@ -1765,12 +1868,12 @@ export function PersonalSheetTab({
                     {sheet[groupKey].map((row) => (
                       <div
                         key={row.id}
-                        className="flex items-center justify-between gap-2 text-xs"
+                        className="flex flex-wrap items-center justify-between gap-2 border-b border-[#191e2b] pb-2 text-xs last:border-b-0 sm:flex-nowrap sm:border-b-0 sm:pb-0"
                       >
-                        <span className="min-w-28 font-medium text-slate-200">
+                        <span className="min-w-0 font-medium text-slate-200 sm:min-w-28">
                           {row.name}
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                           <select
                             disabled={readOnly}
                             value={row.attribute}
@@ -1820,8 +1923,8 @@ export function PersonalSheetTab({
           </section>
 
           {/* Habilidades de Especialização (separada de Habilidades e Talentos, Técnica e Aptidões) */}
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
-            <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-2">
               <div>
                 <h2 className="text-base font-semibold text-slate-100">
                   Habilidades de Especialização
@@ -1923,7 +2026,7 @@ export function PersonalSheetTab({
                             ),
                           }))
                         }
-                        className="min-w-36 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 font-semibold text-slate-100"
+                        className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 font-semibold text-slate-100 sm:w-auto sm:min-w-36"
                       />
                       {!readOnly && (
                         <button
@@ -1969,8 +2072,8 @@ export function PersonalSheetTab({
           </section>
 
           {/* Habilidades e Talentos (Atual / Máx. / Custo - Modelo v2.5) */}
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
-            <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-2">
               <h2 className="text-base font-semibold text-slate-100">
                 Habilidades e Talentos
               </h2>
@@ -2008,7 +2111,7 @@ export function PersonalSheetTab({
                 {sheet.skillTalentsTable.map((entry) => (
                   <div
                     key={entry.id}
-                    className="flex items-center justify-between gap-2 rounded border border-[#1e2332] bg-[#0d1018] px-2.5 py-1.5"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-[#1e2332] bg-[#0d1018] px-2.5 py-2 sm:flex-nowrap sm:py-1.5"
                   >
                     <input
                       type="text"
@@ -2024,7 +2127,7 @@ export function PersonalSheetTab({
                           ),
                         }))
                       }
-                      className="min-w-24 flex-1 bg-transparent font-medium text-slate-100 focus:outline-none"
+                      className="min-w-0 basis-full flex-1 bg-transparent font-medium text-slate-100 focus:outline-none sm:min-w-24 sm:basis-auto"
                     />
                     <input
                       type="number"
@@ -2098,8 +2201,8 @@ export function PersonalSheetTab({
           </section>
 
           {/* Ataques / Registro Rápido de Armas */}
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
-            <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-2">
               <h2 className="text-base font-semibold text-slate-100">
                 Ataques e Registro Rápido
               </h2>
@@ -2144,7 +2247,7 @@ export function PersonalSheetTab({
                     key={weapon.id}
                     className="rounded border border-[#1e2332] bg-[#0d1018] p-3 text-xs"
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
                       <input
                         type="text"
                         disabled={readOnly}
@@ -2157,7 +2260,7 @@ export function PersonalSheetTab({
                             ),
                           }))
                         }
-                        className="flex-1 bg-transparent font-semibold text-slate-100 focus:outline-none"
+                        className="min-w-0 flex-1 bg-transparent font-semibold text-slate-100 focus:outline-none"
                       />
                       <CalculableValueControl
                         field={weapon.hit}
@@ -2426,7 +2529,7 @@ export function PersonalSheetTab({
                     }
                   }
                 }}
-                className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
+                className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
               />
               <button
                 type="button"
@@ -2442,7 +2545,7 @@ export function PersonalSheetTab({
                   }));
                   setNewResistanceText('');
                 }}
-                className="rounded border border-[#2a3145] bg-[#171b28] px-2.5 py-1 text-xs text-slate-200 hover:bg-[#202638]"
+                className="shrink-0 rounded border border-[#2a3145] bg-[#171b28] px-2.5 py-1 text-xs text-slate-200 hover:bg-[#202638]"
               >
                 Adicionar
               </button>
@@ -2451,8 +2554,8 @@ export function PersonalSheetTab({
         </section>
 
         {/* 2. REDUÇÕES DE DANO (RD) */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
-          <div className="mb-3 flex items-center justify-between border-b border-[#1d2230] pb-2">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-2">
             <div>
               <h2 className="text-base font-semibold text-slate-100">
                 Reduções de Dano (RD)
@@ -2655,7 +2758,7 @@ export function PersonalSheetTab({
                       }
                     }
                   }}
-                  className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
+                  className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-200"
                 />
                 <button
                   type="button"
@@ -2671,7 +2774,7 @@ export function PersonalSheetTab({
                     }));
                     setNewImmunityText('');
                   }}
-                  className="rounded border border-[#2a3145] bg-[#171b28] px-2.5 py-1 text-xs text-slate-200 hover:bg-[#202638]"
+                  className="shrink-0 rounded border border-[#2a3145] bg-[#171b28] px-2.5 py-1 text-xs text-slate-200 hover:bg-[#202638]"
                 >
                   Adicionar
                 </button>
@@ -2683,7 +2786,7 @@ export function PersonalSheetTab({
 
       {/* Características, Votos, Anotações e Condições */}
       <div className="grid grid-cols-1 gap-6">
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <h2 className="mb-3 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
             Características, Votos, Anotações e Condições
           </h2>
@@ -2743,7 +2846,7 @@ export function PersonalSheetTab({
                               ),
                             }))
                           }
-                          className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
+                          className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
                         />
                         {!readOnly && (
                           <button
@@ -2805,7 +2908,7 @@ export function PersonalSheetTab({
                               ),
                             }))
                           }
-                          className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
+                          className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
                         />
                         {!readOnly && (
                           <button
@@ -2886,7 +2989,7 @@ export function PersonalSheetTab({
                               },
                             }))
                           }
-                          className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
+                          className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-xs text-slate-100"
                         />
                         <input
                           type="number"

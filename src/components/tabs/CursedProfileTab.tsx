@@ -100,7 +100,7 @@ export function CursedProfileTab({
   return (
     <div className="space-y-6">
       {/* Cabeçalho da Técnica Amaldiçoada */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-[#1d2230] pb-3">
           <h2 className="text-base font-semibold text-slate-100">
             Técnica Amaldiçoada e Maestria
@@ -229,8 +229,8 @@ export function CursedProfileTab({
       </section>
 
       {/* Habilidades de Técnica */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
-        <div className="mb-4 flex items-center justify-between border-b border-[#1d2230] pb-3">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-3">
           <h2 className="text-base font-semibold text-slate-100">
             Habilidades de Técnica
           </h2>
@@ -292,7 +292,7 @@ export function CursedProfileTab({
                       },
                     }))
                   }
-                  className="min-w-48 flex-1 bg-transparent text-sm font-semibold text-slate-100 focus:outline-none"
+                  className="min-w-0 w-full flex-1 bg-transparent text-sm font-semibold text-slate-100 focus:outline-none sm:w-auto sm:min-w-48"
                 />
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -473,7 +473,7 @@ export function CursedProfileTab({
       </section>
 
       {/* Aptidões Amaldiçoadas (separadas de Habilidades de Especialização e Técnica) */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-3">
           <div>
             <h2 className="text-base font-semibold text-slate-100">Aptidões</h2>
@@ -527,7 +527,7 @@ export function CursedProfileTab({
                 key={cat.arrayKey}
                 type="button"
                 onClick={() => setActiveAptitudeTab(cat.arrayKey)}
-                className={`rounded border px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`min-h-[38px] rounded border px-3 py-1.5 text-xs font-medium transition-colors sm:min-h-0 ${
                   active
                     ? 'border-indigo-500/60 bg-indigo-600/20 text-indigo-100'
                     : 'border-[#242a3b] bg-[#0d1018] text-slate-400 hover:text-slate-200'
@@ -548,10 +548,10 @@ export function CursedProfileTab({
             {activeAptitudes.map((apt) => (
               <div
                 key={apt.id}
-                className="space-y-2.5 rounded border border-[#1e2332] bg-[#0d1018] p-4 text-xs"
+                className="space-y-2.5 rounded border border-[#1e2332] bg-[#0d1018] p-3.5 text-xs sm:p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-1 items-center gap-2.5">
+                  <div className="flex w-full min-w-0 flex-1 flex-wrap items-center gap-2.5 sm:w-auto">
                     <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-300">
                       <input
                         type="checkbox"
@@ -598,7 +598,7 @@ export function CursedProfileTab({
                           },
                         }))
                       }
-                      className="min-w-40 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 text-sm font-semibold text-slate-100"
+                      className="min-w-0 w-full flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2.5 py-1 text-sm font-semibold text-slate-100 sm:w-auto sm:min-w-40"
                     />
                   </div>
 
@@ -726,7 +726,7 @@ export function CursedProfileTab({
       </section>
 
       {/* Barreiras e Energia Reversa */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <h2 className="mb-3 border-b border-[#1d2230] pb-2 text-base font-semibold text-slate-100">
           Barreiras e Energia Reversa
         </h2>
@@ -826,7 +826,7 @@ export function CursedProfileTab({
       </section>
 
       {/* EXPANSÃO DE DOMÍNIO — Seção Independente */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-2">
           <div>
             <h2 className="text-base font-semibold text-slate-100">
@@ -903,8 +903,8 @@ export function CursedProfileTab({
               className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-xs text-slate-100"
             />
           </label>
-          <div className="flex items-end justify-between gap-3">
-            <label className="flex flex-1 flex-col gap-1 text-xs text-slate-400">
+          <div className="flex flex-wrap items-end justify-between gap-3 sm:flex-nowrap">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-400">
               Refinamento
               <input
                 type="number"
@@ -1012,7 +1012,7 @@ export function CursedProfileTab({
       </section>
 
       {/* LIBERAÇÃO — Seção Independente com exatamente 4 slots fixos */}
-      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+      <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
         <div className="mb-4 border-b border-[#1d2230] pb-2">
           <h2 className="text-base font-semibold text-slate-100">Liberação</h2>
           <p className="text-[11px] text-slate-400">

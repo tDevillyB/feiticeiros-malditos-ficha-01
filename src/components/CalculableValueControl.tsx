@@ -91,7 +91,7 @@ export function CalculableValueControl({
 
       <div className="flex items-center gap-1.5">
         {editing ? (
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1 sm:flex-nowrap">
             <input
               type="text"
               inputMode="decimal"
@@ -123,13 +123,13 @@ export function CalculableValueControl({
               autoFocus
               onFocus={(e) => e.currentTarget.select()}
               aria-label={label ? `Sobrescrita manual de ${label}` : 'Valor manual'}
-              className="w-20 rounded border border-amber-500/70 bg-[#0d1018] px-2 py-1 text-right font-mono-tabular text-sm text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+              className="w-20 min-w-0 rounded border border-amber-500/70 bg-[#0d1018] px-2 py-1 text-right font-mono-tabular text-sm text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
             />
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleCommitManual}
-              className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/25 whitespace-nowrap shrink-0"
+              className="min-h-[38px] shrink-0 whitespace-nowrap rounded border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/25 sm:min-h-0 sm:px-2"
             >
               Aplicar
             </button>
@@ -155,7 +155,7 @@ export function CalculableValueControl({
                     ? `Valor manual ativo (automático: ${formatVal(field.valorCalculado)}). Clique para editar.`
                     : 'Clique para editar valor manualmente'
                 }
-                className="inline-flex items-center gap-1.5 rounded text-left hover:text-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="inline-flex min-h-[30px] items-center gap-1.5 rounded text-left hover:text-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:min-h-0"
               >
                 <span className={`font-mono-tabular ${valueSizeClass}`}>
                   {formatVal(effective)}
@@ -174,7 +174,7 @@ export function CalculableValueControl({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleResetAuto}
                 title="Retornar ao cálculo automático"
-                className="rounded p-1 text-amber-300 hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                className="inline-flex min-h-[30px] min-w-[30px] items-center justify-center rounded p-1 text-amber-300 hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:min-h-0 sm:min-w-0"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>

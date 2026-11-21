@@ -47,3 +47,42 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+.mobile-snap-track {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mobile-snap-track::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
+    min-height: 40px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    scroll-margin-top: 108px;
+    scroll-margin-bottom: 140px;
+  }
+
+  button,
+  select,
+  input,
+  a,
+  label {
+    touch-action: manipulation;
+  }
+}

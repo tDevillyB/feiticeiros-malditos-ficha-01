@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ExternalLink,
   Lock,
@@ -155,9 +157,9 @@ function RosterCharacterSlot({
   } as CSSProperties;
 
   return (
-    <article className="group relative flex w-[238px] shrink-0 flex-col sm:w-[252px]">
+    <article className="group relative flex w-[224px] snap-center shrink-0 flex-col sm:w-[252px]">
       {/* Moldura Diagonal do Retrato */}
-      <div className="relative mx-auto h-[300px] w-[204px] sm:h-[322px] sm:w-[216px]">
+      <div className="relative mx-auto h-[284px] w-[192px] sm:h-[322px] sm:w-[216px]">
         <div
           className="grade-frame relative h-full w-full overflow-hidden border bg-[#090b12] shadow-[0_14px_30px_rgba(0,0,0,0.55)] transition-colors duration-200"
           style={frameStyle}
@@ -270,7 +272,7 @@ function RosterCharacterSlot({
 
         {/* Emblema em Diamante no vértice inferior esquerdo (Nível) */}
         <div
-          className="absolute -bottom-3 -left-3 z-20 flex h-9 w-9 rotate-45 items-center justify-center border bg-[#0e121c] shadow-lg transition-colors"
+          className="absolute -bottom-3 -left-2 z-20 flex h-9 w-9 rotate-45 items-center justify-center border bg-[#0e121c] shadow-lg transition-colors sm:-left-3"
           style={{ borderColor: gradeTheme.borderColor }}
           title={`Nível ${card.level}`}
         >
@@ -281,7 +283,7 @@ function RosterCharacterSlot({
       </div>
 
       {/* Área Compacta de Recursos (PV e PE) na Base do Personagem */}
-      <div className="mt-4 -ml-2 mr-2 space-y-2 pl-2">
+      <div className="mt-4 space-y-2 sm:-ml-2 sm:mr-2 sm:pl-2">
         {/* PV */}
         <div>
           <div className="mb-1 flex items-center justify-between gap-1.5 text-xs">
@@ -301,7 +303,7 @@ function RosterCharacterSlot({
                     type="button"
                     aria-label={`Diminuir PV de ${displayName}`}
                     onClick={() => onAdjustPool(card.sheetId, 'hp', -1)}
-                    className="rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-red-300 hover:bg-red-500/20"
+                    className="inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-red-300 hover:bg-red-500/20 sm:min-h-0 sm:min-w-0"
                   >
                     -1
                   </button>
@@ -309,7 +311,7 @@ function RosterCharacterSlot({
                     type="button"
                     aria-label={`Aumentar PV de ${displayName}`}
                     onClick={() => onAdjustPool(card.sheetId, 'hp', 1)}
-                    className="rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-emerald-300 hover:bg-emerald-500/20"
+                    className="inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-emerald-300 hover:bg-emerald-500/20 sm:min-h-0 sm:min-w-0"
                   >
                     +1
                   </button>
@@ -344,7 +346,7 @@ function RosterCharacterSlot({
                     type="button"
                     aria-label={`Diminuir PE de ${displayName}`}
                     onClick={() => onAdjustPool(card.sheetId, 'pe', -1)}
-                    className="rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-red-300 hover:bg-red-500/20"
+                    className="inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-red-300 hover:bg-red-500/20 sm:min-h-0 sm:min-w-0"
                   >
                     -1
                   </button>
@@ -352,7 +354,7 @@ function RosterCharacterSlot({
                     type="button"
                     aria-label={`Aumentar PE de ${displayName}`}
                     onClick={() => onAdjustPool(card.sheetId, 'pe', 1)}
-                    className="rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-indigo-200 hover:bg-indigo-500/20"
+                    className="inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded border border-[#242a3b] bg-[#0b0d14] px-1.5 py-0.5 font-mono-tabular text-[10px] leading-none text-indigo-200 hover:bg-indigo-500/20 sm:min-h-0 sm:min-w-0"
                   >
                     +1
                   </button>
@@ -383,7 +385,7 @@ function RosterCharacterSlot({
               <button
                 type="button"
                 onClick={() => onOpenControl(card.sheetId)}
-                className="rounded border border-indigo-500/40 bg-indigo-600/20 px-2.5 py-1 text-[11px] font-medium text-indigo-100 hover:bg-indigo-600/35 whitespace-nowrap shrink-0"
+                className="rounded border border-indigo-500/40 bg-indigo-600/20 px-2.5 py-2 text-[11px] font-medium text-indigo-100 hover:bg-indigo-600/35 whitespace-nowrap shrink-0 sm:py-1"
               >
                 Central de Combate
               </button>
@@ -392,7 +394,7 @@ function RosterCharacterSlot({
               <button
                 type="button"
                 onClick={() => onOpenFullSheet(card.sheetId)}
-                className="rounded border border-[#242a3b] bg-[#0e121c] px-2.5 py-1 text-[11px] text-slate-200 hover:bg-[#192033] whitespace-nowrap shrink-0"
+                className="rounded border border-[#242a3b] bg-[#0e121c] px-2.5 py-2 text-[11px] text-slate-200 hover:bg-[#192033] whitespace-nowrap shrink-0 sm:py-1"
               >
                 {isOwner ? 'Minha Ficha' : 'Abrir Ficha'}
               </button>
@@ -401,7 +403,7 @@ function RosterCharacterSlot({
               <button
                 type="button"
                 onClick={onRequestSync}
-                className="rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-200 hover:bg-amber-500/20 whitespace-nowrap shrink-0"
+                className="rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-200 hover:bg-amber-500/20 whitespace-nowrap shrink-0 sm:py-1"
               >
                 Solicitar Ficha
               </button>
@@ -436,8 +438,15 @@ export function MasterShieldTab({
   const [conditionSearch, setConditionSearch] = useState('');
   const [combatResistanceDraft, setCombatResistanceDraft] = useState('');
   const [combatImmunityDraft, setCombatImmunityDraft] = useState('');
+  const overviewTrackRef = useRef<HTMLDivElement>(null);
 
   const isGM = viewerRole === 'GM';
+
+  const scrollOverviewBy = (direction: -1 | 1) => {
+    const track = overviewTrackRef.current;
+    if (!track) return;
+    track.scrollBy({ left: direction * 240, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     if (requestedSubView) {
@@ -604,14 +613,14 @@ export function MasterShieldTab({
         sheetForHeader.permissions.ownerPlayerId !== currentPlayerId;
 
       return (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#212636] bg-[#11141e] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-slate-400">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#212636] bg-[#11141e] px-3 py-3 sm:px-4">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto">
+            <label className="flex w-full min-w-0 flex-col items-stretch gap-1 text-xs text-slate-400 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
               {isGM ? 'Personagem em Controle' : 'Personagem na Central de Combate'}
               <select
                 value={effectiveControlSheetId}
                 onChange={(e) => onSelectControlSheet(e.target.value)}
-                className="rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full min-w-0 max-w-full rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-sm font-medium text-slate-100 focus:border-indigo-500 focus:outline-none sm:w-auto"
               >
                 {combatSelectorItems.map((item) => {
                   const itemPolicy = item.sheet
@@ -652,7 +661,7 @@ export function MasterShieldTab({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {isGM && sheetForHeader && (
               <button
                 type="button"
@@ -665,7 +674,7 @@ export function MasterShieldTab({
                     },
                   }))
                 }
-                className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+                className={`inline-flex flex-1 min-h-[40px] items-center justify-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 sm:flex-initial sm:min-h-0 ${
                   sheetForHeader.permissions.lockedByGM
                     ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
                     : 'border-[#242a3b] bg-[#0b0d14] text-slate-300 hover:bg-[#171b28]'
@@ -689,7 +698,7 @@ export function MasterShieldTab({
               <button
                 type="button"
                 onClick={() => onOpenFullSheet(sheetForHeader.id)}
-                className="inline-flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 whitespace-nowrap shrink-0"
+                className="inline-flex flex-1 min-h-[40px] items-center justify-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 whitespace-nowrap shrink-0 sm:flex-initial sm:min-h-0"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 Abrir Ficha Completa
@@ -837,7 +846,7 @@ export function MasterShieldTab({
           const controlGradeTheme = getGradeTheme(grade);
           return (
             <section
-              className="relative overflow-hidden rounded-lg border border-[#212636] bg-[#11141e] p-4"
+              className="relative overflow-hidden rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-4"
             >
               <div
                 aria-hidden="true"
@@ -889,7 +898,7 @@ export function MasterShieldTab({
                   </div>
                 </div>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="grid w-full grid-cols-3 gap-2 border-t border-[#1d2230] pt-2.5 text-xs sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-4 sm:border-t-0 sm:pt-0">
               <div>
                 <span className="text-slate-400">Defesa: </span>
                 <span className="font-mono-tabular text-base font-bold text-slate-100">
@@ -915,7 +924,7 @@ export function MasterShieldTab({
         })()}
 
         {/* 2. STATUS (PV, PE, SANIDADE, INTEGRIDADE) */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <h3 className="mb-4 border-b border-[#1d2230] pb-2 text-sm font-semibold uppercase tracking-wide text-slate-200">
             Status e Recursos
           </h3>
@@ -935,13 +944,13 @@ export function MasterShieldTab({
                   </div>
                 </div>
                 {!combatReadOnly && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
                     {([-5, -1, 1, 5] as const).map((delta) => (
                       <button
                         key={delta}
                         type="button"
                         onClick={() => updateControlled((prev) => adjustPoolResource(prev, 'hp', delta))}
-                        className={`rounded border border-[#242a3b] bg-[#11141e] px-2 py-1 font-mono-tabular text-xs font-medium ${
+                        className={`min-h-[38px] min-w-[38px] rounded border border-[#242a3b] bg-[#11141e] px-2.5 py-1.5 font-mono-tabular text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 ${
                           delta < 0
                             ? 'text-red-300 hover:bg-red-500/15'
                             : 'text-emerald-300 hover:bg-emerald-500/15'
@@ -1002,13 +1011,13 @@ export function MasterShieldTab({
                   </div>
                 </div>
                 {!combatReadOnly && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
                     {([-5, -1, 1, 5] as const).map((delta) => (
                       <button
                         key={delta}
                         type="button"
                         onClick={() => updateControlled((prev) => adjustPoolResource(prev, 'pe', delta))}
-                        className={`rounded border border-[#242a3b] bg-[#11141e] px-2 py-1 font-mono-tabular text-xs font-medium ${
+                        className={`min-h-[38px] min-w-[38px] rounded border border-[#242a3b] bg-[#11141e] px-2.5 py-1.5 font-mono-tabular text-xs font-medium sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1 ${
                           delta < 0
                             ? 'text-red-300 hover:bg-red-500/15'
                             : 'text-indigo-200 hover:bg-indigo-500/15'
@@ -1067,7 +1076,7 @@ export function MasterShieldTab({
                   </div>
                 </div>
                 {!combatReadOnly && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
                     {([-5, -1, 1, 5] as const).map((delta) => (
                       <button
                         key={delta}
@@ -1075,7 +1084,7 @@ export function MasterShieldTab({
                         onClick={() =>
                           updateControlled((prev) => adjustMentalResource(prev, 'sanity', delta))
                         }
-                        className="rounded border border-[#242a3b] bg-[#11141e] px-2 py-1 font-mono-tabular text-xs text-slate-200 hover:bg-[#1a2030]"
+                        className="min-h-[38px] min-w-[38px] rounded border border-[#242a3b] bg-[#11141e] px-2.5 py-1.5 font-mono-tabular text-xs text-slate-200 hover:bg-[#1a2030] sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
                       >
                         {delta > 0 ? `+${delta}` : delta}
                       </button>
@@ -1140,7 +1149,7 @@ export function MasterShieldTab({
                   </div>
                 </div>
                 {!combatReadOnly && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-1">
                     {([-5, -1, 1, 5] as const).map((delta) => (
                       <button
                         key={delta}
@@ -1148,7 +1157,7 @@ export function MasterShieldTab({
                         onClick={() =>
                           updateControlled((prev) => adjustMentalResource(prev, 'integrity', delta))
                         }
-                        className="rounded border border-[#242a3b] bg-[#11141e] px-2 py-1 font-mono-tabular text-xs text-slate-200 hover:bg-[#1a2030]"
+                        className="min-h-[38px] min-w-[38px] rounded border border-[#242a3b] bg-[#11141e] px-2.5 py-1.5 font-mono-tabular text-xs text-slate-200 hover:bg-[#1a2030] sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
                       >
                         {delta > 0 ? `+${delta}` : delta}
                       </button>
@@ -1221,7 +1230,7 @@ export function MasterShieldTab({
         </section>
 
         {/* 3. ATRIBUTOS & TREINAMENTOS */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-200">
               Atributos & Treinamentos
@@ -1270,15 +1279,15 @@ export function MasterShieldTab({
               <span className="text-xs font-medium text-slate-300">
                 Perícias ({filteredSkills.length})
               </span>
-              <div className="flex items-center gap-2">
-                <div className="relative">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <div className="relative min-w-0 flex-1 sm:flex-initial">
                   <Search className="pointer-events-none absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2 text-slate-500" />
                   <input
                     type="text"
                     placeholder="Buscar perícia..."
                     value={skillFilterQuery}
                     onChange={(e) => setSkillFilterQuery(e.target.value)}
-                    className="rounded border border-[#242a3b] bg-[#0b0d14] py-1 pr-2 pl-6 text-xs text-slate-100"
+                    className="w-full rounded border border-[#242a3b] bg-[#0b0d14] py-1 pr-2 pl-6 text-xs text-slate-100 sm:w-auto"
                   />
                 </div>
                 <label className="inline-flex items-center gap-1.5 text-xs text-slate-300">
@@ -1292,7 +1301,7 @@ export function MasterShieldTab({
                 </label>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
               {filteredSkills.map((sk) => {
                 const total = resolveCalculableValue(sk.total);
                 return (
@@ -1330,7 +1339,7 @@ export function MasterShieldTab({
         </section>
 
         {/* 4. COMBATE (ATAQUES, SALVAGUARDAS, DEFESA COM FONTES, CDS) */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <div className="mb-4 flex items-center gap-2 border-b border-[#1d2230] pb-2">
             <Swords className="h-4 w-4 text-indigo-300" />
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-200">
@@ -1429,7 +1438,7 @@ export function MasterShieldTab({
 
             {/* Defesa e Fontes */}
             <div className="space-y-2.5 rounded border border-[#1e2332] bg-[#0d1018] p-3.5">
-              <div className="flex items-center justify-between border-b border-[#191e2b] pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#191e2b] pb-2 sm:flex-nowrap">
                 <h4 className="text-xs font-semibold text-slate-200">
                   Defesa e Fontes
                 </h4>
@@ -1526,7 +1535,7 @@ export function MasterShieldTab({
         </section>
 
         {/* 5. TÉCNICAS, ESPECIALIZAÇÃO, APTIDÕES E SHIKIGAMIS */}
-        <section className="space-y-5 rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="space-y-5 rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-2">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-indigo-300" />
@@ -1841,7 +1850,7 @@ export function MasterShieldTab({
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {!combatReadOnly &&
                             ([-5, -1, 1, 5] as const).map((delta) => (
                               <button
@@ -1864,7 +1873,7 @@ export function MasterShieldTab({
                                     }),
                                   }))
                                 }
-                                className={`rounded border border-[#242a3b] bg-[#11141e] px-1.5 py-0.5 font-mono-tabular text-[11px] ${
+                                className={`min-h-[36px] min-w-[36px] rounded border border-[#242a3b] bg-[#11141e] px-2 py-1 font-mono-tabular text-[11px] sm:min-h-0 sm:min-w-0 sm:px-1.5 sm:py-0.5 ${
                                   delta < 0 ? 'text-red-300' : 'text-emerald-300'
                                 }`}
                               >
@@ -1879,7 +1888,7 @@ export function MasterShieldTab({
                                 [sum.id]: !prev[sum.id],
                               }))
                             }
-                            className="inline-flex items-center gap-1 rounded border border-[#242a3b] bg-[#11141e] px-2 py-0.5 text-[11px] text-slate-200"
+                            className="inline-flex min-h-[36px] items-center gap-1 rounded border border-[#242a3b] bg-[#11141e] px-2.5 py-1 text-[11px] text-slate-200 sm:min-h-0 sm:px-2 sm:py-0.5"
                           >
                             {expanded ? 'Recolher' : 'Perfil'}
                           </button>
@@ -2084,7 +2093,7 @@ export function MasterShieldTab({
         {/* 6. RESISTÊNCIAS, REDUÇÕES DE DANO (RD) E IMUNIDADES — 3 SEÇÕES SEPARADAS */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* Resistências */}
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
             <h3 className="mb-3 border-b border-[#1d2230] pb-2 text-sm font-semibold uppercase tracking-wide text-slate-200">
               Resistências
             </h3>
@@ -2155,7 +2164,7 @@ export function MasterShieldTab({
                   placeholder="Outra resistência..."
                   value={combatResistanceDraft}
                   onChange={(e) => setCombatResistanceDraft(e.target.value)}
-                  className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200"
+                  className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200"
                 />
                 <button
                   type="button"
@@ -2171,7 +2180,7 @@ export function MasterShieldTab({
                     }));
                     setCombatResistanceDraft('');
                   }}
-                  className="rounded border border-[#2a3145] bg-[#171b28] px-2 py-1 text-[11px] text-slate-200"
+                  className="min-h-[38px] min-w-[38px] rounded border border-[#2a3145] bg-[#171b28] px-2 py-1 text-[11px] text-slate-200 sm:min-h-0 sm:min-w-0"
                 >
                   +
                 </button>
@@ -2180,7 +2189,7 @@ export function MasterShieldTab({
           </section>
 
           {/* Reduções de Dano (RD) */}
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#1d2230] pb-2">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-200">
                 Reduções de Dano (RD)
@@ -2250,7 +2259,7 @@ export function MasterShieldTab({
           </section>
 
           {/* Imunidades */}
-          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+          <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
             <h3 className="mb-3 border-b border-[#1d2230] pb-2 text-sm font-semibold uppercase tracking-wide text-slate-200">
               Imunidades
             </h3>
@@ -2347,7 +2356,7 @@ export function MasterShieldTab({
                     placeholder="Outra imunidade..."
                     value={combatImmunityDraft}
                     onChange={(e) => setCombatImmunityDraft(e.target.value)}
-                    className="flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200"
+                    className="min-w-0 flex-1 rounded border border-[#242a3b] bg-[#0b0d14] px-2 py-1 text-[11px] text-slate-200"
                   />
                   <button
                     type="button"
@@ -2363,7 +2372,7 @@ export function MasterShieldTab({
                       }));
                       setCombatImmunityDraft('');
                     }}
-                    className="rounded border border-[#2a3145] bg-[#171b28] px-2 py-1 text-[11px] text-slate-200"
+                    className="min-h-[38px] min-w-[38px] rounded border border-[#2a3145] bg-[#171b28] px-2 py-1 text-[11px] text-slate-200 sm:min-h-0 sm:min-w-0"
                   >
                     +
                   </button>
@@ -2374,14 +2383,14 @@ export function MasterShieldTab({
         </div>
 
         {/* 7. DERIVADOS (INCLUINDO ATENÇÃO ESPECIAL AO DESLOCAMENTO) */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <h3 className="mb-3 border-b border-[#1d2230] pb-2 text-sm font-semibold uppercase tracking-wide text-slate-200">
             Valores Derivados
           </h3>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {/* Movimento / Deslocamento detalhado */}
             <div className="rounded border border-indigo-500/30 bg-[#0d1018] p-3 text-xs">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
                 <div>
                   <div className="font-semibold text-indigo-200">
                     Movimento / Deslocamento (m)
@@ -2454,7 +2463,7 @@ export function MasterShieldTab({
 
             {/* Atenção */}
             <div className="rounded border border-[#1e2332] bg-[#0d1018] p-3 text-xs">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
                 <div>
                   <div className="font-semibold text-slate-200">Atenção</div>
                   <div className="text-[11px] text-slate-400">
@@ -2526,7 +2535,7 @@ export function MasterShieldTab({
 
             {/* Iniciativa */}
             <div className="rounded border border-[#1e2332] bg-[#0d1018] p-3 text-xs">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
                 <div>
                   <div className="font-semibold text-slate-200">Iniciativa</div>
                   <div className="text-[11px] text-slate-400">
@@ -2655,7 +2664,7 @@ export function MasterShieldTab({
         </section>
 
         {/* 8. CONDIÇÕES */}
-        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-5">
+        <section className="rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2230] pb-2">
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-200">
@@ -2667,14 +2676,14 @@ export function MasterShieldTab({
                   : 'Adicione, remova ou consulte descrições manualmente (sem contadores automáticos de turno).'}
               </p>
             </div>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 placeholder="Filtrar condição..."
                 value={conditionSearch}
                 onChange={(e) => setConditionSearch(e.target.value)}
-                className="rounded border border-[#242a3b] bg-[#0b0d14] py-1 pr-2.5 pl-7 text-xs text-slate-100"
+                className="w-full rounded border border-[#242a3b] bg-[#0b0d14] py-1 pr-2.5 pl-7 text-xs text-slate-100 sm:w-auto"
               />
             </div>
           </div>
@@ -2691,7 +2700,7 @@ export function MasterShieldTab({
             ) : (
               <div className="space-y-1.5">
                 {sheet.conditions.bleeding && (
-                  <div className="flex items-center justify-between gap-2 rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs sm:flex-nowrap">
                     <div>
                       <strong className="text-red-200">
                         Sangramento ({sheet.conditions.bleeding}):
@@ -2717,7 +2726,7 @@ export function MasterShieldTab({
                   </div>
                 )}
                 {sheet.conditions.freezing && (
-                  <div className="flex items-center justify-between gap-2 rounded border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs sm:flex-nowrap">
                     <div>
                       <strong className="text-cyan-200">
                         Congelamento ({sheet.conditions.freezing}):
@@ -2745,7 +2754,7 @@ export function MasterShieldTab({
                 {activeConditions.map((cond) => (
                   <div
                     key={cond}
-                    className="flex items-center justify-between gap-2 rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs sm:flex-nowrap"
                   >
                     <div>
                       <strong className="text-red-200">{cond}:</strong>{' '}
@@ -2824,7 +2833,7 @@ export function MasterShieldTab({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
             {filteredConditionOptions.map((cond) => {
               const active = sheet.conditions.flags[cond];
               return (
@@ -2842,7 +2851,7 @@ export function MasterShieldTab({
                       },
                     }))
                   }
-                  className={`rounded border px-2.5 py-1.5 text-left text-xs transition-colors disabled:cursor-default ${
+                  className={`rounded border px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-default sm:py-1.5 ${
                     active
                       ? 'border-red-500/60 bg-red-500/15 font-medium text-red-200'
                       : 'border-[#1e2332] bg-[#0d1018] text-slate-300 hover:bg-[#161a28]'
@@ -2861,7 +2870,7 @@ export function MasterShieldTab({
   return (
     <div className="space-y-6">
       {/* Cabeçalho do Escudo do Mestre */}
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[#212636] bg-[#11141e] p-4">
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#212636] bg-[#11141e] p-3.5 sm:gap-4 sm:p-4">
         <div>
           <h2 className="text-base font-semibold text-slate-100">
             Escudo do Mestre — Painel da Sessão
@@ -2873,42 +2882,42 @@ export function MasterShieldTab({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {isInsideOBR && (
             <button
               type="button"
               onClick={onRequestSyncFromRoom}
-              className="inline-flex items-center gap-1.5 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0"
+              className="inline-flex w-full min-h-[38px] items-center justify-center gap-1.5 rounded border border-[#242a3b] bg-[#0b0d14] px-3 py-1.5 text-xs text-slate-300 hover:bg-[#171b28] whitespace-nowrap shrink-0 sm:w-auto sm:min-h-0"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Sincronizar Sala
             </button>
           )}
 
-          <div className="flex items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5">
+          <div className="grid w-full grid-cols-2 items-center gap-1 rounded border border-[#242a3b] bg-[#0b0d14] p-0.5 sm:flex sm:w-auto">
             <button
               type="button"
               onClick={() => setActiveSubView('overview')}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+              className={`inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded px-2 py-1.5 text-center text-xs font-medium leading-tight whitespace-normal sm:min-h-0 sm:px-3 sm:whitespace-nowrap sm:shrink-0 ${
                 activeSubView === 'overview'
                   ? 'bg-[#22283a] text-slate-100'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Users className="h-3.5 w-3.5" />
-              Visão Geral da Mesa
+              <Users className="h-3.5 w-3.5 shrink-0" />
+              <span>Visão Geral da Mesa</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveSubView('control')}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+              className={`inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded px-2 py-1.5 text-center text-xs font-medium leading-tight whitespace-normal sm:min-h-0 sm:px-3 sm:whitespace-nowrap sm:shrink-0 ${
                 activeSubView === 'control'
                   ? 'bg-indigo-600/30 text-indigo-100'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Shield className="h-3.5 w-3.5" />
-              {isGM ? 'Central de Combate (Mestre)' : 'Central de Combate'}
+              <Shield className="h-3.5 w-3.5 shrink-0" />
+              <span>{isGM ? 'Central de Combate (Mestre)' : 'Central de Combate'}</span>
             </button>
           </div>
         </div>
@@ -2952,34 +2961,67 @@ export function MasterShieldTab({
                 )}
               </div>
 
-              {/* Faixa integrada de retratos diagonais lado a lado */}
-              <div className="flex flex-1 flex-wrap items-start justify-center gap-x-3 gap-y-8 sm:gap-x-4">
-                {overviewCards.map((card) => {
-                  const cardPolicy = evaluateSheetAccess(card, accessContext);
-                  const canQuickEdit = canQuickEditSummary(card);
-                  const hasFullSheet = sessionSheets.some((s) => s.id === card.sheetId);
+              {/* Faixa integrada de retratos diagonais lado a lado (carrossel horizontal no mobile, intacto no desktop) */}
+              <div className="w-full flex-1">
+                {overviewCards.length > 1 && (
+                  <div className="mb-2 flex items-center justify-between gap-2 sm:hidden">
+                    <span className="text-[11px] text-slate-400">
+                      Deslize entre personagens
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label="Personagem anterior"
+                        onClick={() => scrollOverviewBy(-1)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#242a3b] bg-[#0b0d14] text-slate-200 hover:bg-[#171b28]"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Próximo personagem"
+                        onClick={() => scrollOverviewBy(1)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#242a3b] bg-[#0b0d14] text-slate-200 hover:bg-[#171b28]"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                  return (
-                    <RosterCharacterSlot
-                      key={card.sheetId}
-                      card={card}
-                      isGM={isGM}
-                      isOwner={cardPolicy.isOwner}
-                      canQuickEdit={canQuickEdit}
-                      canOpenCombatCenter={cardPolicy.canViewCombatCenter}
-                      canOpenFullSheet={cardPolicy.canViewFullSheet}
-                      hasFullSheet={hasFullSheet}
-                      onAdjustPool={(sheetId, pool, delta) =>
-                        onUpdateSheetById(sheetId, (prev) =>
-                          adjustPoolResource(prev, pool, delta)
-                        )
-                      }
-                      onOpenControl={handleOpenControlForCard}
-                      onOpenFullSheet={onOpenFullSheet}
-                      onRequestSync={onRequestSyncFromRoom}
-                    />
-                  );
-                })}
+                <div
+                  ref={overviewTrackRef}
+                  className={`mobile-snap-track flex w-full flex-nowrap items-start gap-4 overflow-x-auto snap-x snap-mandatory px-2 pb-3 pt-1 sm:flex-wrap sm:justify-center sm:overflow-visible sm:gap-x-4 sm:gap-y-8 sm:p-0 ${
+                    overviewCards.length === 1 ? 'justify-center' : 'justify-start'
+                  }`}
+                >
+                  {overviewCards.map((card) => {
+                    const cardPolicy = evaluateSheetAccess(card, accessContext);
+                    const canQuickEdit = canQuickEditSummary(card);
+                    const hasFullSheet = sessionSheets.some((s) => s.id === card.sheetId);
+
+                    return (
+                      <RosterCharacterSlot
+                        key={card.sheetId}
+                        card={card}
+                        isGM={isGM}
+                        isOwner={cardPolicy.isOwner}
+                        canQuickEdit={canQuickEdit}
+                        canOpenCombatCenter={cardPolicy.canViewCombatCenter}
+                        canOpenFullSheet={cardPolicy.canViewFullSheet}
+                        hasFullSheet={hasFullSheet}
+                        onAdjustPool={(sheetId, pool, delta) =>
+                          onUpdateSheetById(sheetId, (prev) =>
+                            adjustPoolResource(prev, pool, delta)
+                          )
+                        }
+                        onOpenControl={handleOpenControlForCard}
+                        onOpenFullSheet={onOpenFullSheet}
+                        onRequestSync={onRequestSyncFromRoom}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
